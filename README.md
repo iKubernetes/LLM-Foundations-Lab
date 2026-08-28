@@ -526,11 +526,11 @@ modelscope download --model qwen/Qwen3.5-4B --local_dir ./model/Qwen3.5-4B
 
 首先在主机实例上找到“自定义服务”。
 
-![07-打通服务隧道](/Users/marion/Documents/AI基础课实验手册/Images/07-打通服务隧道.png)
+![07-打通服务隧道](./Images/07-打通服务隧道.png)
 
 它提供了分别用于Windows和Linux/Mac的不同方法，事实上在Windows主机上，也可以参考Linux的方法进行。
 
-![08-打通服务隧道](/Users/marion/Documents/AI基础课实验手册/Images/08-打通服务隧道.png)
+![08-打通服务隧道](./Images/08-打通服务隧道.png)
 
 其中，-L的标准格式为：
 
