@@ -20,7 +20,10 @@
 
 在AutoDL上开始“创建实例”，选择计费方式、地区、GPU型号和GPU数量。![01-创建GPU服务器实例](./Images/01-创建GPU服务器实例.png)
 
-> 需要注意的是，创建实例时，若使用消费级的GPU，建议选择型号略新一些的，以免它能够支持的驱动和CUDA版本较老，无法运行较新版本的模型。例如，若要运行Qwen3.5及以上的版本，建议使用RTX 4090或RTX 5090。
+> 需要注意的是，创建实例时，若使用消费级的GPU，建议选择型号略新一些的，以免它能够支持的驱动和CUDA版本较老，无法运行较新版本的模型。例如，若要运行Qwen3.5及以上的版本，建议使用RTX 4090或RTX 5090。一般来说：
+>
+> - RTX 3090：vllm 0.15.0及其前的版本，能够基于CUDA 12.8及之前的版本，运行Qwen3；
+> - RTX 4090 / 4090D：vllm 0.17.0及后续的版本，能够基于 CUDA 13.0 及之后的版本，运行Qwen3.5；
 
 接着，按需要选择扩充的数据盘空间。需要注意，扩展的空间要小于等于选择的目标主机上可分配的磁盘空间。
 
@@ -553,7 +556,7 @@ modelscope download --model qwen/Qwen3.5-4B --local_dir ./model/Qwen3.5-4B
 
 
 
-![09-打通服务隧道](/Users/marion/Documents/AI基础课实验手册/Images/09-打通服务隧道.png)
+![09-打通服务隧道](/home/marion/git-repos/LLM-Foundations-Lab/Images/09-打通服务隧道.png)
 
 
 
@@ -690,6 +693,17 @@ Open WebUI 提供了多种灵活的部署方式，以适应从个人尝鲜到企
 - HTTP_PROXY / http_proxy：HTTP 代理服务器地址
 - HTTPS_PROXY / https_proxy：HTTPS 代理服务器地址
 - NO_PROXY：不使用代理的地址列表
+
+
+
+另外，为了能够顺利获取Open WebUI的Docker Image，可能还需要为其添加代理服务，一个可用的示例如下（请添加到docker.service文件中）：
+
+```
+Environment="HTTP_PROXY=http://172.29.0.1:10808"
+Environment="HTTPS_PROXY=http://172.29.0.1:10808"
+Environment="NO_PROXY=localhost,127.0.0.1,::1,*.magedu.com,192.168.0.0/16,172.16.0.0/16,10.0.0.0/8"
+ExecStart=/usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
+```
 
 
 
