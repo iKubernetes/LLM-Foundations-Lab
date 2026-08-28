@@ -1,0 +1,58 @@
+services:
+  prometheus:
+    #image: prom/prometheus:latest
+    image: prom/prometheus:v3.14.0
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./promconf:/etc/prometheus:ro
+      - ./promdata:/prometheus
+    environment:
+      - VLLM_HOST=http://172.20.1:8000 # 设置变量
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=90d"
+      - "--web.enable-lifecycle"
+    user: "1000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    networks:
+      - llm-net
+
+  grafana:
+    #image: grafana/grafana:latest
+    image: grafana/grafana:13.0.7
+    container_name: grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana_data:/var/lib/grafana           # 数据持久化
+      - ./grafana_provisioning:/etc/grafana/provisioning  # 自动配置（可选）
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin              # 默认用户名
+      - GF_SECURITY_ADMIN_PASSWORD=MagEdu.Com123         # 默认密码（首次登录后建议修改）
+      - GF_SERVER_SERVE_FROM_SUB_PATH=false
+    depends_on:
+      - prometheus
+    user: "472"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    networks:
+      - llm-net
+
+networks:
+  llm-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
