@@ -14,3 +14,4 @@ services:
     restart: unless-stopped
     volumes:
       - ./open-webui:/app/backend/data
+
