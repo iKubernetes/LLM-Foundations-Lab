@@ -904,7 +904,7 @@ Qwen3-Embedding 模型凭借其卓越的语义表征能力，在多种自然语�
 
 ```
 # 1. 创建独立虚拟环境
-conda create -n qwen3-emb python=3.11 -y
+conda create -n qwen3-emb python=3.12 -y
 conda activate qwen3-emb
 
 # 2. 安装 vLLM（自动匹配CUDA版本）
@@ -937,6 +937,11 @@ vllm serve ./Qwen3-Embedding-4B \
   --port 8000 \
   --trust-remote-code
 ```
+
+> 注意：如果在同一个具有多GPU的主机上使用不同的vllm进程启动多个推理服务时，需要对使用非0标号的其它GPU时进行声明要使用的GPU的索引号，方法有两种：
+>
+> - 使用单独的声明命令（带分号分隔）：export CUDA_VISIBLE_DEVICES=...; vllm ...
+> - 直接作为命令前缀声明（不要带分号）：CUDA_VISIBLE_DEVICES=...  vllm ...
 
 验证服务就绪：
 
