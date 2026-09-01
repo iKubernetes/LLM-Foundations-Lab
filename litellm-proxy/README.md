@@ -157,6 +157,157 @@ docker-compose -f docker-compose-cache-redis.yml up
 
 
 
+### 4. 语义缓存
+
+语义缓存是部署于 AI Gateway 层（如 LiteLLM Proxy、Portkey、Cloudflare AI Gateway 等）的一种请求级拦截与复用机制。其核心目标是：在用户请求到达下游 LLM 之前，通过向量相似度判断该请求是否已有语义等价的缓存响应，从而避免重复推理、降低延迟、削减 Token 成本。
+
+对于 LiteLLM Proxy 来说，语义缓存（Semantic Cache）非常适合部署在 LLM Gateway 层，尤其是大量 FAQ、RAG 问答、知识助手、标准化运维咨询等重复语义请求，可以明显降低后端 vLLM 的 GPU 请求量。截至 **2026 年 9 月**，LiteLLM 官方 Proxy 已明确支持以下三种语义后端：
+
+- `redis-semantic`
+- `qdrant-semantic`
+- `valkey-semantic`
+
+本示例采用**LiteLLM Proxy + Redis Semantic Cache + Embedding Model + vLLM Chat Model**这样一套架构来演示语义缓存的功能。
+
+#### 语义缓存的工作机制
+
+```mermaid
+flowchart TD
+	%% magedu.com
+    A[User Prompt] --> B[Embedding Model]
+    B --> C[Prompt Vector]
+    C --> D[Vector Similarity Search]
+    D --> E{Similarity >= Threshold?}
+    
+    E -- Yes --> F[Cache Response]
+    E -- No --> G[LLM]
+    
+    G --> H[Store Prompt Vector & Response]
+    
+    %% 样式美化（可选）
+    style E fill:#fff4e6,stroke:#ff9800,stroke-width:2px
+    style F fill:#e8f5e9,stroke:#4caf50,stroke-width:2px
+    style G fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    style H fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+```
+
+
+
+**阶段 1：请求接入与向量化**（Prompt Vector → Vector Similarity Search）
+
+- 用户请求（Prompt）经由 Gateway 拦截后，不直接转发至 LLM，而是首先送入 Embedding 模型（如 qwen3-embedding、text-embedding-3-small、bge-large 等）。
+- Embedding 模型将自然语言文本映射为固定维度的稠密向量（如 1536 维），该向量即为 Prompt Vector，是后续相似度检索的唯一索引键。
+
+> 此步骤的计算开销极低（通常 < 10ms），远低于一次完整 LLM 推理。
+
+**阶段 2：向量相似度检索**（Prompt Vector → Vector Similarity Search）
+
+- Gateway 将生成的 Prompt Vector 提交至后端向量存储（如 Redis Vector Search、Qdrant、Milvus、pgvector 等）。
+- 检索算法通常采用 余弦相似度（Cosine Similarity） 或 内积（Inner Product），在已缓存的历史 Prompt Vector 集合中执行 Top-K 近邻搜索（ANN）。
+- 返回结果包含：最相似历史向量的相似度分数（score ∈ [0, 1]）及其关联的缓存响应体。
+
+**阶段 3：阈值判定与路由决策**
+
+```
+Similarity >= Threshold ?
+    ├── Yes → Cache Response（直接返回）
+    └── No  → LLM（透传至模型）
+```
+
+- 阈值（Threshold） 是系统的关键超参数，典型取值范围为 0.92 ~ 0.98。
+  - 阈值过高（如 0.99）：缓存命中率极低，形同虚设。
+  - 阈值过低（如 0.85）：可能将语义不同的请求误判为等价，导致响应污染（Response Contamination）。
+- Yes 分支：相似度达标，Gateway 直接返回缓存的 LLM 响应，请求生命周期终止。下游 LLM 不被调用，Token 消耗为零。
+- No 分支：相似度未达标，判定为新请求，Gateway 将原始 Prompt 透传至下游 LLM 进行完整推理。
+
+**阶段 4：缓存写入（仅 No 分支触发）**
+
+```
+LLM Response → Store Prompt Vector + Response
+```
+
+LLM 返回响应后，Gateway 执行异步写入操作，将以下三元组持久化至向量存储：
+
+| 字段            | 内容                              | 用途                   |
+| :-------------- | :-------------------------------- | :--------------------- |
+| `prompt_vector` | 本次请求的 Embedding 向量         | 后续相似度检索的索引键 |
+| `response`      | LLM 完整响应体                    | 命中时直接返回的载荷   |
+| `metadata`      | 时间戳、模型名、TTL、token 用量等 | 过期淘汰与审计         |
+
+- 写入操作通常置于异步队列中执行，不阻塞响应返回路径。
+
+#### 关键设计约束与工程考量
+
+1. 缓存失效策略（Invalidation）
+- TTL（Time-To-Live）：设定缓存有效期（如 24h），过期自动淘汰，防止陈旧响应被返回。
+- 模型版本绑定：缓存条目须与生成它的模型版本（如 gpt-4o-2024-08-06）强绑定。模型升级后，旧缓存应标记失效。
+- 参数敏感性：temperature、top_p、system prompt 等参数差异应纳入缓存键的考量，否则可能返回不符合调用方预期的响应。
+2. 阈值调优
+- 阈值并非全局固定值，应根据业务场景分级设定：
+- 高确定性场景（如 FAQ、知识问答）：阈值可放宽至 0.90。
+- 创意生成 / 代码生成：阈值应收紧至 0.97+，或直接禁用语义缓存。
+3. 非幂等请求的排除
+- 含时间敏感信息（"今天的天气"）、用户上下文（"我的订单状态"）或随机性要求的请求，不应进入缓存检索流程。Gateway 需通过规则引擎或 Prompt 分类器进行前置过滤。
+4. 安全性与隔离
+- 多租户环境下，向量存储必须按 tenant_id / api_key 进行命名空间隔离，严禁跨租户缓存命中。
+
+#### 请求链
+
+如下请求链的工作逻辑可严格概括为：应用请求 → 网关拦截 → 向量化 → 语义检索 → 阈值判定 → 命中直返 / 未命中推理并回写。它以 LiteLLM Proxy 为核心网关、集成 Redis Semantic Cache 的 LLM 推理服务链路。其设计目标是在应用层（Dify）与模型推理层（vLLM Qwen）之间插入一个语义感知的缓存拦截层，在保证响应正确性的前提下，最大化缓存命中率、降低推理成本与端到端延迟。其核心价值在于将 LLM 推理从"每次全量计算"转变为"按需计算 + 语义复用"的混合模式。
+
+```mermaid
+flowchart TD
+    Dify["Dify"]
+    LiteLLM["LiteLLM Proxy\n:4000"]
+    EmbVLLM["Embedding vLLM"]
+    Redis["Redis Semantic Cache"]
+    HitResp["Response"]
+    Qwen["vLLM Qwen"]
+    CacheWrite["Cache Response"]
+    Client["Client"]
+
+    Dify --> LiteLLM
+    LiteLLM -->|"Generate Embedding"| EmbVLLM
+    EmbVLLM --> Redis
+    Redis -->|"HIT"| HitResp
+    Redis -->|"MISS"| Qwen
+    Qwen --> CacheWrite
+    HitResp --> Client
+    CacheWrite --> Client
+
+    %% 样式定义
+    style Dify fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style LiteLLM fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    style EmbVLLM fill:#ede7f6,stroke:#6a1b9a,stroke-width:2px
+    style Redis fill:#fce4ec,stroke:#c62828,stroke-width:2px
+    style HitResp fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style Qwen fill:#ede7f6,stroke:#6a1b9a,stroke-width:2px
+    style CacheWrite fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style Client fill:#e0e0e0,stroke:#424242,stroke-width:2px
+```
+
+
+
+#### 本地 Embedding 模型
+
+语义缓存的 Embedding 与传统 RAG Embedding 本质相同，都是把文本转换成向量。但语义缓存与 RAG 的目标稍有区别，RAG 更关注“查询请求能否找到相关文档”，Semantic Cache 更关注“两个请求是否足够等价，旧答案是否足够可用”。
+
+因此 Semantic Cache 对 Embedding 的要求实际上很高，它不只是要求“相关内容靠得近”，还希望“看起来相关、但不能共用答案”的问题不要靠得太近。因此 Semantic Cache 最关键的模型能力之一，是**细粒度语义区分能力**，因此我们并不能单纯按照“Embedding 越小越便宜”来选。如果主要考虑开源、本地部署、中文与英文兼顾，可以分成几组。
+
+| 模型                           | 参数规模 | 中文 | 英文 | 多语言 | 资源 | Semantic Cache |
+| ------------------------------ | -------- | ---- | ---- | ------ | ---- | -------------- |
+| Qwen3-Embedding-0.6B           | 0.6B     | 很好 | 很好 | 很好   | 低   | ★★★★☆          |
+| Qwen3-Embedding-4B             | 4B       | 优秀 | 优秀 | 优秀   | 中   | **★★★★★**      |
+| Qwen3-Embedding-8B             | 8B       | 优秀 | 优秀 | 优秀   | 高   | ★★★★★          |
+| BGE-M3                         | ~0.6B    | 很好 | 很好 | 优秀   | 低   | ★★★★☆          |
+| multilingual-e5-large-instruct | ~0.6B    | 好   | 很好 | 很好   | 低   | ★★★★           |
+| gte-Qwen2-1.5B-instruct        | 1.5B     | 很好 | 很好 | 好     | 中低 | ★★★★           |
+| gte-Qwen2-7B-instruct          | ~7.6B    | 很好 | 很好 | 好     | 高   | ★★★★☆          |
+
+每个需要执行 Semantic Cache Lookup 的请求，都先要调用一次 Embedding。所以 embedding 太重的话，会导致调用成本过高。最好的规格，是4B的版本，因为4B 实际上处在一个非常好的“甜点位”：性能已经非常接近 8B，但参数规模只有它的一半。
+
+
+
 
 ## 路由功能与示例
 
@@ -168,7 +319,58 @@ LiteLLM Proxy Router 是企业级 LLM 流量调度中枢，它让一个 Proxy �
 
 下图展示了LiteLLM-Router的路由决策机制。
 
-![LiteLLM-Proxy_Router-routing-decision](./images/LiteLLM-Proxy_Router-routing-decision.png)
+```mermaid
+graph TD
+    %% 1. 客户端请求
+    A["客户端 (Client)"] -->|"请求 (v1/chat/completions)"| B["LiteLLM Proxy API 接口"]
+
+    %% 2. 预处理与身份鉴权
+    subgraph "预处理与鉴权 (Pre-Processing & Auth)"
+        B --> C["API Key / Token 校验"]
+        C --> D["速率限制与预算检查<br>(RPM/TPM Rate Limit & Budget)"]
+    end
+
+    %% 3. 路由与决策引擎
+    D --> E{"Router 路由决策引擎<br>(Routing Engine)"}
+
+    subgraph "路由策略与配置 (Routing Strategies)"
+        E --> F1["负载均衡<br>(Simple Shuffle / Weighted)"]
+        E --> F2["最低延迟优先<br>(Lowest Latency)"]
+        E --> F3["最低成本优先<br>(Lowest Cost)"]
+        E --> F4["故障转移机制<br>(Fallbacks / Cooldowns)"]
+    end
+
+    %% 4. 模型选择与代理调用
+    F1 --> G["确定目标部署模型<br>(Target Deployment Picked)"]
+    F2 --> G
+    F3 --> G
+    F4 --> G
+
+    G --> H["转换请求格式<br>(Transform Request for Provider)"]
+
+    %% 5. 上游 LLM 服务商
+    subgraph "LLM 提供商 (LLM Providers)"
+        H --> I1["OpenAI API"]
+        H --> I2["Azure OpenAI"]
+        H --> I3["Anthropic / Bedrock"]
+        H --> I4["其他模型 (Ollama/Groq等)"]
+    end
+
+    %% 6. 响应与后处理
+    I1 --> J["接收上游响应<br>(LLM Response)"]
+    I2 --> J
+    I3 --> J
+    I4 --> J
+
+    J --> K["异步日志与费用统计<br>(Redis / Postgres Audit & Cost Logging)"]
+    K --> L["返回结果给客户端"]
+
+    %% 样式定义
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style E fill:#ffa,stroke:#333,stroke-width:2px
+    style G fill:#bbf,stroke:#333,stroke-width:2px
+    style L fill:#afa,stroke:#333,stroke-width:2px
+```
 
 
 
@@ -186,9 +388,85 @@ LiteLLM Proxy Router 是企业级 LLM 流量调度中枢，它让一个 Proxy �
 
 ### 可用性保障体系
 
-为确保系统可用性，Router提供了Retry、Cooldown、Fallback等几种机制结合负载均衡功能进行。下图是它们的协同逻辑。
+从 SRE 视角看，**LiteLLM Router 本质上就是一个面向 LLM 推理流量的“智能 L7 负载均衡器 + 容错控制器”**。区别只是它除了传统的健康状态和并发状态之外，还理解 **Model、Token、TPM、RPM、模型组、模型级 Fallback** 等 LLM 特有语义。下图是**四层 Router 决策模型**：先过滤哪些 Deployment 不能用，再通过 Routing Strategy 决定用哪个；调用失败后通过 Retry 和 Cooldown 解决实例级故障，如果整个 Model Group 都无法服务，再通过 Fallback 切换到其他模型。
 
-<img src="./images/Router_workflow.png" alt="Router_workflow" style="zoom:67%;" />
+```mermaid
+flowchart TD
+
+    A["客户端请求<br/>Model Group"] --> B["第一层：候选过滤<br/>Candidate Filtering"]
+
+    B --> B1["排除：<br/>Cooldown<br/>TPM/RPM 超限<br/>并发超限<br/>不健康实例"]
+
+    B1 --> C["第二层：负载均衡<br/>Routing Strategy"]
+
+    C --> C1["从健康 Deployments 中<br/>选择一个实例"]
+
+    C1 --> D["第三层：实例级容错<br/>Retry + Cooldown"]
+
+    D --> E{"当前 Model Group<br/>是否还能处理请求？"}
+
+    E -->|是| F["返回响应"]
+
+    E -->|否| G["第四层：模型级容错<br/>Fallback"]
+
+    G --> H["切换至备用<br/>Model Group"]
+
+    H --> B
+```
+
+1. **请求首先进入 Model Group，而不是直接指定某个实例**
+
+   客户端通常请求的是一个逻辑模型名，例如“model = qwen3.8-27b”，我们可将这个 `qwen3.8-27b` 看作一个 **Model Group**。在 LiteLLM Proxy 后面，它可能对应多个实际 Deployment，所以客户端看到的是一个模型，而 Router 看到的是一组候选后端。这也是 LiteLLM Router 能做负载均衡、高可用和容灾的基础。
+
+2. **Router 先找到所有候选 Deployment**
+
+   找到 Model Group 后，Router 会取得这个模型组对应的所有后端实例。但这时尚且不能立即选一个来转发请求，因为这些 Deployment 当前状态可能不同。例如，有些实例正常，也有些实例RPM已经耗尽（达到调用限制），还有些实例刚刚连续调用失败，所以后面还要经过一层过滤。
+
+3. **Pre-call Checks：先过滤“不应该调用”的实例**
+
+   这是生产环境里非常重要的一步。Router 在真正发起模型调用之前，会根据运行状态过滤掉不适合作为当前候选目标的 Deployment。典型过滤条件包括Cooldown、TPM 限制、RPM 限制、Concurrency Limit和Health 状态，Router需要先排除明显不能用的，再从健康实例中进行挑选。
+
+4. **Routing Strategy：从健康实例中决定“选谁”**
+
+   过滤完成之后，如果还有多个健康 Deployment，Router 才真正进入负载均衡阶段。
+
+5. **选中 Deployment 后，真正发送模型请求**
+
+6. **如果调用失败，先进行 Deployment 级故障处理**
+
+   如果当前实例调用失败，Router 会记录失败状态。此时并不会立即认为 qwen3.8-27b 整个模型都不可用了，因为可能只是这个 Deployment 有问题。于是就引出了两个很重要的机制：Retry和Cooldown。
+
+7. **Failure Threshold：判断该 Deployment 是否已经“不可信”**
+
+   偶发的一次超时，并不一定需要马上摘掉节点，这时一般会通过 Failure Threshold 判断“失败次数是否已经超过阈值”，若已经超过，Router 会认为该节点暂时不应该继续接收流量，于是就进入cooldown状态。
+
+8. **Cooldown：临时把故障实例移出候选池**
+
+   Cooldown是当于暂时摘除这个 Deployment，而非永久删除。经过一段时间后，它还可能重新恢复到候选集合。因此它类似传统负载均衡器中的“Backend Temporary Ejection”，或者可以类比 Nginx / Envoy / Service Mesh 中的“故障节点临时摘除”。
+
+9. **Retry：当前实例失败后，尝试其他 Deployment**
+
+   如果当前 Deployment 失败，而同一个 Model Group 中还有其他健康节点，那么 Router 可以 Retry。需要特别强调说明的是，Retry 通常仍然是在同一个 Model Group 内解决问题。因此 Retry 本质上属于实例级容错。
+
+10. **若整个 Model Group 都不可用，则会进入 Fallback**
+
+    Retry 是 Deployment 级容错，Fallback 是 Model Group 级容错。例如，若qwen3.8-27这一个Model Scope中的实例A1请求失败，Retry会将请求发往A2或A3，若其中的A1、A2和A3全部故障，则Fallback会将请求切换至其它Model Group，例如qwen3.5-9b。
+
+    
+
+进一步把相关概念映射到传统 SRE/基础设施概念，应该会非常容易理解：
+
+| LiteLLM Router     | SRE / 基础设施中的对应概念 |
+| ------------------ | -------------------------- |
+| Model Group        | Service / Backend Pool     |
+| Deployment         | Backend Instance / Pod     |
+| Pre-call Check     | Backend Eligibility Check  |
+| Routing Strategy   | Load Balancing Algorithm   |
+| Retry              | Request Retry              |
+| Cooldown           | Temporary Backend Ejection |
+| Fallback           | Service-Level Failover     |
+| TPM/RPM            | Rate Limit / Capacity      |
+| Healthy Deployment | Healthy Backend            |
 
 ### Router使用示例
 
