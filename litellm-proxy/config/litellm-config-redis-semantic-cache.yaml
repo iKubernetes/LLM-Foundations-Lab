@@ -4,8 +4,9 @@ model_list:
   # 1. 主推理模型
   - model_name: qwen3
     litellm_params:
-      model: openai/qwen3
-      api_base: http://172.21.0.1:8000/v1
+      model: openai/qwen3.8-27b
+      #api_base: http://172.21.0.1:8000/v1
+      api_base: http://172.25.0.10:8001/v1
       api_type: openai
       api_key: "EMPTY"
     model_info:
@@ -15,7 +16,7 @@ model_list:
   - model_name: qwen3-embedding
     litellm_params:
       model: openai/qwen3-embedding
-      api_base: http://172.21.0.1:8001/v1
+      api_base: http://172.29.0.165:8000/v1
       api_type: openai
       api_key: "EMPTY"
     model_info:

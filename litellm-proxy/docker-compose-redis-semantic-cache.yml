@@ -3,7 +3,7 @@ version: '3.9'
 services:
   # 1. LiteLLM Proxy - API 服务层 + 语义缓存 + 监控
   litellm-proxy:
-    #image: ghcr.io/berriai/litellm:main-latest
+    image: ghcr.io/berriai/litellm:main-latest
     build:
       context: ./litellm-proxy
       dockerfile: Dockerfile
@@ -65,8 +65,10 @@ services:
     restart: unless-stopped
     volumes:
       - ./data/redis:/data
-      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
-    command: redis-server /usr/local/etc/redis/redis.conf
+      - ./config/redis-stack.conf:/etc/redis-stack.conf:ro
+    #command: redis-server /usr/local/etc/redis/redis.conf
+    environment:
+    - REDIS_ARGS=--requirepass magedu.com --maxmemory 8gb --maxmemory-policy allkeys-lru --save 900 1 --save 300 10 --save 60 10000 --appendonly yes
     networks:
       - litellm-net
     healthcheck:
