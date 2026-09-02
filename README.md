@@ -324,6 +324,8 @@ Host
 | **Qwen3.8**  | **`>=5.8.0`**      | `>=0.17.0` (PR 支持) | **CUDA 12.8+** | config.json 由 transformers 5.8.0 写入            |
 | **Qwen3-VL** | `>=4.57.0`         | 官方支持             | CUDA 11.8+     | 视觉语言模型，版本要求更严格                      |
 
+> 本示例将采用Qwen3.5-4B的模型，其环境也支持目前的Qwen3.8系列的模型。同时，本示例将使用RTX 4090或RTX 4090D显卡。
+
 
 
 #### 1.3.2 获取模型权重
@@ -331,6 +333,10 @@ Host
 下载开源模型主要有两种途径：通过 **Hugging Face** 或国内的 **ModelScope（魔搭社区）**。ModelScope 对于国内用户来说下载速度通常更快、更稳定。
 
 ```bash
+# 创建专用于下载的 conda 环境
+conda create -n model_dl python=3.12 -y
+conda activate model_dl
+
 # 基础库
 pip install "transformers>=4.57" huggingface_hub
 
@@ -362,9 +368,28 @@ modelscope download --model qwen/Qwen3.5-4B --local_dir ./model/Qwen3.5-4B
 
 #### 1.3.3 启动推理服务
 
-假设已经按需创建好Conda环境（以vllm为例），并安装好兼容的vLLM、transformers、CUDA等。若尚未安装好，请参考前面的步骤进行。
+假设已经按需创建好Conda环境（以vllm为例），并安装好兼容的vLLM、transformers、CUDA等。若尚未安装好，请参考下的面的第0步骤进行。
 
-1. **最简单的启动方式**
+0. **准备推理环境**
+
+   ```bash
+   # 创建专用于vLLM推理的 conda 环境
+   conda create -n vllm python=3.12 -y
+   conda activate vllm
+   
+   # 安装 vllm>=0.19.0
+   pip install vllm=0.25.0
+   ```
+
+   > 注意：安装vllm时，务必确保其依赖的CUDA环境不能超出Driver驱动版本可以兼容到的版本。另外，在AutoDL上，由于系统级的CUDA版本较低，若不手动升级，则应该声明环境变量来规避 FlashInfer sampler在启动时引用本地 CUDA JIT时的问题。
+   >
+   > ```bash
+   > export VLLM_USE_FLASHINFER_SAMPLER=0
+   > ```
+
+
+
+1. **最简单的启动方式**（不推荐）
 
    ```bash
    vllm serve ./Qwen3.5-4B
@@ -380,7 +405,7 @@ modelscope download --model qwen/Qwen3.5-4B --local_dir ./model/Qwen3.5-4B
 
 2. **推荐的启动命令**
 
-   对于单卡测试，建议至少显式写出如下几个关键参数，它已经是一个比较合适的“基础模板”。
+   对于单卡测试，建议至少显式写出如下几个关键参数，它更接近合适的“基础模板”。
 
    ```bash
    vllm serve ./Qwen3.5-4B \
@@ -498,7 +523,9 @@ modelscope download --model qwen/Qwen3.5-4B --local_dir ./model/Qwen3.5-4B
        --reasoning-parser qwen3
    ```
 
-   如果还要测试 Tool Calling，就使用类似如下命令：
+   
+
+   如果还要测试 Tool Calling，就使用类似如下命令（与**Dify**或**Open WebUI**结合使用时，更需要此处的启动方式）：
 
    ```bash
    vllm serve ./Qwen3.5-4B \
@@ -516,7 +543,7 @@ modelscope download --model qwen/Qwen3.5-4B --local_dir ./model/Qwen3.5-4B
        --tool-call-parser qwen3_xml
    ```
 
-   需要注意的是，reasoning-parser 和 tool-call-parser 是两个不同层面的 parser，前者负责推理，后者负责工具调用。
+   > 需要注意的是，reasoning-parser 和 tool-call-parser 是两个不同层面的 parser，前者负责推理，后者负责工具调用。
 
 
 
@@ -528,15 +555,21 @@ modelscope download --model qwen/Qwen3.5-4B --local_dir ./model/Qwen3.5-4B
 
 ![07-打通服务隧道](./Images/07-打通服务隧道.png)
 
-它提供了分别用于Windows和Linux/Mac的不同方法，事实上在Windows主机上，也可以参考Linux的方法进行。
+AutoDL目前提供了两种不同的服务接入方法。
+
+1. **使用SSH隧道**
+
+​	它提供了分别用于Windows和Linux/Mac的不同方法，事实上在Windows主机上，也可以参考Linux的方法进行。
 
 ![08-打通服务隧道](./Images/08-打通服务隧道.png)
 
 其中，-L的标准格式为：
 
-```
+```bash
 -L [bind_address:]port:host:hostport
 ```
+
+
 
 其中各参数的意义如下表：
 
@@ -554,9 +587,40 @@ modelscope download --model qwen/Qwen3.5-4B --local_dir ./model/Qwen3.5-4B
 - 如果不加 `-g`，图中的 `-L` 等效于 `-L 127.0.0.1:6006:127.0.0.1:6006`，只有本机能访问。
 - 加了 -g 后，等效于将本地绑定地址设为 0.0.0.0，同一局域网内的其他机器也可以通过本地 IP 和 6006 端口访问这个隧道服务。
 
+```mermaid
+%% 马哥教育（magedu.com）
+graph LR
+    %% 定义子图：带 -g 参数
+    subgraph With_G ["有 -g 参数"]
+        LocalMachine1["本地机器"] -->|"访问 localhost:6006"| SSHTunnel1
+        LANMachine1["局域网其他机器"] -->|"可访问 本地IP:6006"| SSHTunnel1
+        SSHTunnel1["SSH 隧道<br>监听 0.0.0.0:6006<br>(对所有地址开放)"] -->|"转发"| RemoteServer1["远程服务器:6006"]
+    end
 
+    %% 定义子图：无 -g 参数 (默认)
+    subgraph Without_G ["无 -g 参数 (默认)"]
+        LocalMachine2["本地机器"] -->|"只能从本机访问<br>localhost:6006"| SSHTunnel2
+        LANMachine2["局域网其他机器"] -.->|"连接被拒绝"| SSHTunnel2
+        SSHTunnel2["SSH 隧道<br>监听 127.0.0.1:6006"] -->|"转发"| RemoteServer2["远程服务器:6006"]
+    end
 
-![09-打通服务隧道](/home/marion/git-repos/LLM-Foundations-Lab/Images/09-打通服务隧道.png)
+    %% 节点样式
+    style LocalMachine1 fill:#e1d5e7,stroke:#9673a6
+    style LANMachine1 fill:#d5e8d4,stroke:#82b366
+    style SSHTunnel1 fill:#e1d5e7,stroke:#9673a6
+    style RemoteServer1 fill:#e1d5e7,stroke:#9673a6
+
+    style LocalMachine2 fill:#e1d5e7,stroke:#9673a6
+    style LANMachine2 fill:#ffcccc,stroke:#b85450,stroke-dasharray: 5 5
+    style SSHTunnel2 fill:#e1d5e7,stroke:#9673a6
+    style RemoteServer2 fill:#e1d5e7,stroke:#9673a6
+```
+
+2. 使用AutoDL为容器开放的端口
+
+   ![07-2-打通服务隧道](./Images/07-2-打通服务隧道.png)
+
+​		启动vLLM时，设置其监听于6006或6008端口，即使用图片中对应右向箭头（→）后的地址通过互联网来访问相应的服务。
 
 
 
@@ -733,37 +797,103 @@ docker compose up
 
 ## 三、监控vLLM推理服务
 
+vLLM （以0.25.0为例）内置了与Prometheus兼容的监控指标接口，无需额外安装Exporter。该版本的监控能力建立在之前版本的基础上，因此以下教程也普遍适用。只需启动vLLM服务，它就会通过/metrics端点自动暴露Prometheus格式的监控数据。本示例对应的内容位于vllm-prometheus目录中，以Docker Compose的方式给出。
 
+```mermaid
+%% 马哥教育(magedu.com)
+flowchart LR
+    Client["客户端 / 应用"] -->|"1. 发送推理请求"| vLLM["vLLM 推理服务<br>端口: 8000<br>暴露 /metrics 接口"]
 
-```bash
-# 切换到vllm-prometheus目录
-cd vllm-prometheus
+    subgraph Monitor_Stack ["监控栈"]
+        direction TB
+        Prometheus["Prometheus<br>端口: 9090<br>指标存储"] -->|"3. 查询指标数据"| Grafana["Grafana<br>端口: 3000<br>可视化面板"]
+    end
 
-# 创建服务用到的数据目录
-mkdir -p promdata grafana_data
-
-# 设置其属主、属组，以确保指定的用户可以正常访问
-chown 1000:1000 promdata/
-chown 472:472 grafana_data/
+    vLLM -->|"2. 定期拉取指标<br> (Pull 模式)"| Prometheus
+    Admin["运维 / 开发人员"] -->|"4. 访问仪表盘<br>查看监控图表"| Grafana
 ```
 
+### 开始监控
+
+1. 初始设置
+
+   ```bash
+   # 切换到vllm-prometheus目录
+   cd vllm-prometheus
+   
+   # 创建服务用到的数据目录
+   mkdir -p promdata grafana_data
+   
+   # 设置其属主、属组，以确保指定的用户可以正常访问
+   chown 1000:1000 promdata/
+   chown 472:472 grafana_data/
+   ```
+
+2. 修改目标Target（vllm）
+
+   在prometheus的配置文件（promconf/prometheus.yml）中，修改vllm相关的目标Target的地址为容器化运行的Prometheus可达的地址。
+
+   ```yaml
+   global:
+     scrape_interval: 15s
+     evaluation_interval: 15s
+   
+     external_labels:
+       monitor: "docker-compose-monitor"
+   
+   # 采集配置
+   scrape_configs:
+     # 采集 Prometheus 自身指标
+     - job_name: "prometheus"
+       scrape_interval: 5s
+       static_configs:
+         - targets: ["localhost:9090"]
+   
+     # 采集 vLLM 指标，主要修改这部分的配置
+     - job_name: "inference-engine"
+       scrape_interval: 10s
+       metrics_path: /metrics
+       static_configs:
+         - targets:
+           - "172.20.0.1:8000"
+   ```
+
+3. 启动服务
+
+   ```bash
+   # 获取Image
+   docker compose pull
+   
+   # 启动服务
+   docker compose up -d
+   ```
+
+4. 导入Grafana Dashboard
+
+   Grafana的Dashboard：25502
 
 
-启动服务：
 
-```bash
-# 获取Image
-docker compose pull
+### 关键监控指标
+通过Prometheus和Grafana，可以监控以下关键指标：
 
-# 启动服务
-docker compose up -d
-```
+1. 请求与排队
+   - vllm:num_requests_running：当前正在处理的请求数。
+   - vllm:num_requests_waiting：当前在等待队列中的请求数。
+   - vllm:num_requests_swapped：被交换到CPU内存的请求数。
 
+2. 性能与延迟
+   - vllm:time_to_first_token_seconds：首Token延迟（TTFT）。
+   - vllm:time_per_output_token_seconds：每个输出Token的生成时间（TPOT）。
+   - vllm:e2e_request_latency_seconds：端到端请求延迟。
 
+3. 吞吐量
+   - vllm:prompt_tokens_total：处理的提示Token总数。
+   - vllm:generation_tokens_total：生成的Token总数。
 
-
-
-Grafana的Dashboard：25502
+4. 缓存与资源
+   - vllm:kv_cache_usage_perc：KV缓存的使用百分比。
+   - vllm:gpu_cache_usage_perc：GPU缓存使用百分比。
 
 
 
