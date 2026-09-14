@@ -1,0 +1,79 @@
+groups:
+  - name: vllm_alerts
+    rules:
+      # ---------- 服务可用性 ----------
+      - alert: vLLMServiceDown
+        expr: up{job="vllm"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "vLLM 服务实例 {{ $labels.instance }} 已宕机"
+          description: "vLLM 服务已超过1分钟无法访问。"
+
+      - alert: vLLMMetricsMissing
+        expr: absent(vllm:num_requests_running)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "vLLM 指标缺失"
+          description: "已连续5分钟未采集到 vLLM 的运行中请求指标，服务可能已停止上报。"
+
+      # ---------- 请求延迟 ----------
+      - alert: HighVLLMTimeToFirstToken
+        expr: histogram_quantile(0.99, rate(vllm:time_to_first_token_seconds_bucket[5m])) > 2
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "vLLM 首字延迟（TTFT）P99 过高"
+          description: "过去5分钟内，P99 首字延迟持续超过2秒。当前值: {{ $value | printf \"%.2f\" }}s"
+
+      - alert: HighVLLME2ELatency
+        expr: histogram_quantile(0.95, rate(vllm:e2e_request_latency_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "vLLM 端到端请求延迟过高"
+          description: "过去5分钟内，95%的请求端到端延迟超过10秒。当前值: {{ $value | printf \"%.2f\" }}s"
+
+      # ---------- 请求错误率 ----------
+      - alert: HighVLLMErrorRate
+        expr: sum(rate(vllm:request_failure_counter[5m])) / sum(rate(vllm:request_counter[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "vLLM 请求错误率过高"
+          description: "过去5分钟内，请求错误率超过5%。当前错误率: {{ $value | printf \"%.2f\" }}%"
+
+      # ---------- 资源利用率 ----------
+      - alert: HighVLLMGPUMemoryUsage
+        expr: vllm:gpu_memory_usage_bytes / vllm:gpu_memory_total_bytes > 0.9
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "vLLM GPU 显存使用率过高"
+          description: "GPU 显存使用率持续5分钟超过90%，存在 OOM 风险。当前使用率: {{ $value | printf \"%.2f\" }}%"
+
+      - alert: HighVLLMKVCacheUsage
+        expr: vllm:kv_cache_usage_perc > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "vLLM KV Cache 使用率过高"
+          description: "KV Cache 使用率持续5分钟超过90%，可能引发请求抢占。当前使用率: {{ $value | printf \"%.2f\" }}%"
+
+      # ---------- 请求队列 ----------
+      - alert: VLLMRequestQueueBacklog
+        expr: vllm:num_requests_waiting > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "vLLM 请求队列积压"
+          description: "等待处理的请求数持续超过10个。当前队列深度: {{ $value }}"

@@ -32,21 +32,21 @@ groups:
       # ---------- 请求延迟 ----------
       - alert: HighVLLMTimeToFirstToken
         expr: histogram_quantile(0.99, rate(vllm:time_to_first_token_seconds_bucket[5m])) > 2
-        for: 5m
+        for: 2m
         labels:
           severity: warning
         annotations:
           summary: "vLLM 首字延迟（TTFT）P99 过高"
-          description: "过去5分钟内，P99 首字延迟持续超过2秒。当前值: {{ $value | printf \"%.2f\" }}s"
+          description: "过去2分钟内，P99 首字延迟持续超过2秒。当前值: {{ $value | printf \"%.2f\" }}s"
 
       - alert: HighVLLME2ELatency
         expr: histogram_quantile(0.95, rate(vllm:e2e_request_latency_seconds_bucket[5m])) > 10
-        for: 5m
+        for: 2m
         labels:
           severity: warning
         annotations:
           summary: "vLLM 端到端请求延迟过高"
-          description: "过去5分钟内，95%的请求端到端延迟超过10秒。当前值: {{ $value | printf \"%.2f\" }}s"
+          description: "过去2分钟内，95%的请求端到端延迟超过10秒。当前值: {{ $value | printf \"%.2f\" }}s"
 
       # ---------- 请求错误率 ----------
       - alert: HighVLLMErrorRate
@@ -61,21 +61,21 @@ groups:
       # ---------- 资源利用率 ----------
       - alert: HighVLLMGPUMemoryUsage
         expr: vllm:gpu_memory_usage_bytes / vllm:gpu_memory_total_bytes > 0.9
-        for: 5m
+        for: 2m
         labels:
           severity: critical
         annotations:
           summary: "vLLM GPU 显存使用率过高"
-          description: "GPU 显存使用率持续5分钟超过90%，存在 OOM 风险。当前使用率: {{ $value | printf \"%.2f\" }}%"
+          description: "GPU 显存使用率持续2分钟超过90%，存在 OOM 风险。当前使用率: {{ $value | printf \"%.2f\" }}%"
 
       - alert: HighVLLMKVCacheUsage
         expr: vllm:kv_cache_usage_perc > 0.9
-        for: 5m
+        for: 2m
         labels:
           severity: warning
         annotations:
           summary: "vLLM KV Cache 使用率过高"
-          description: "KV Cache 使用率持续5分钟超过90%，可能引发请求抢占。当前使用率: {{ $value | printf \"%.2f\" }}%"
+          description: "KV Cache 使用率持续2分钟超过90%，可能引发请求抢占。当前使用率: {{ $value | printf \"%.2f\" }}%"
 
       # ---------- 请求队列 ----------
       - alert: VLLMRequestQueueBacklog

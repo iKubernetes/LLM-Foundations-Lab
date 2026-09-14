@@ -822,16 +822,16 @@ flowchart LR
    cd vllm-prometheus
    
    # 创建服务用到的数据目录
-   mkdir -p promdata grafana_data
+   mkdir -p prometheus/data grafana/data alertmanager/data
    
    # 设置其属主、属组，以确保指定的用户可以正常访问
-   chown 1000:1000 promdata/
+   chown 1000:1000 prometheus/data alertmanager/data
    chown 472:472 grafana_data/
    ```
 
 2. 修改目标Target（vllm）
 
-   在prometheus的配置文件（promconf/prometheus.yml）中，修改vllm相关的目标Target的地址为容器化运行的Prometheus可达的地址。
+   在prometheus的配置文件（prometheus/conf/prometheus.yml）中，修改vllm相关的目标Target的地址为容器化运行的Prometheus可达的地址。
 
    ```yaml
    global:

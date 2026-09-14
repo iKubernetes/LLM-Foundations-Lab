@@ -7,8 +7,8 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./promconf:/etc/prometheus:ro
-      - ./promdata:/prometheus
+      - ./prometheus/conf:/etc/prometheus:ro
+      - ./prometheus/data:/prometheus
     environment:
       - VLLM_HOST=http://172.20.1:8000 # 设置变量
     command:
@@ -25,6 +25,38 @@ services:
     networks:
       - llm-net
 
+  alertmanager:
+    #image: prom/alertmanager:latest
+    image: prom/alertmanager:v0.28.1
+    container_name: alertmanager
+    restart: always
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/conf:/etc/alertmanager:ro
+      - ./alertmanager/data:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--log.level=debug"
+    user: "1000"
+    extra_hosts:
+      - "dify.magedu.com:172.29.0.165"
+    # 定义 profiles，默认不启动 alertmanager 服务，需要手动调用，调用方法：
+    # 1. 启动未带profile的各service和指定的profile名称的service: 
+    # docker compose --profile alert up -d
+    # 2. 仅启动 alertmanager service的命令:
+    # docker compose --profile alert up -d alertmanager
+    profiles:
+      - alert    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    networks:
+      - llm-net
+
   grafana:
     #image: grafana/grafana:latest
     image: grafana/grafana:13.0.7
@@ -33,11 +65,11 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./grafana_data:/var/lib/grafana           # 数据持久化
-      - ./grafana_provisioning:/etc/grafana/provisioning  # 自动配置（可选）
+      - ./grafana/data:/var/lib/grafana           # 数据持久化
+      - ./grafana/provisioning:/etc/grafana/provisioning  # 自动配置（可选）
     environment:
       - GF_SECURITY_ADMIN_USER=admin              # 默认用户名
-      - GF_SECURITY_ADMIN_PASSWORD=MagEdu.Com123         # 默认密码（首次登录后建议修改）
+      - GF_SECURITY_ADMIN_PASSWORD=magedu.com         # 默认密码（首次登录后建议修改）
       - GF_SERVER_SERVE_FROM_SUB_PATH=false
     depends_on:
       - prometheus

@@ -1,0 +1,32 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+  external_labels:
+    monitor: "docker-compose-monitor"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093      # AlertManager 仍使用静态配置（基础设施组件通常固定）
+
+rule_files:
+  - "/etc/prometheus/alert_rules/*.yml"    # 告警规则目录
+
+# ------ 采集配置 ------
+scrape_configs:
+  # 采集 Prometheus 自身指标（自身地址固定，无需服务发现）
+  - job_name: "prometheus"
+    scrape_interval: 5s
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # 采集 vLLM 指标, 使用基于 YAML 文件的服务发现
+  - job_name: "vllm"
+    scrape_interval: 10s
+    metrics_path: /metrics
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/file_sd_targets/*.yml"   # 服务发现目标文件路径
+        refresh_interval: 30s                        # 文件变更检测间隔，无需重启即可生效

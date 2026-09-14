@@ -1,0 +1,37 @@
+# ------ 全局配置 ------
+global:
+  # 告警恢复超时时间：当告警在 5 分钟内未再次触发，则自动标记为"已解决"
+  # 即 Prometheus 端停止发送该告警后，AlertManager 等待 5 分钟才发出 resolved 通知
+  resolve_timeout: 5m
+
+# ------ 路由配置（告警分发规则） ------
+route:
+  # 告警分组依据：相同 alertname + instance 的告警会被合并为一条通知
+  # 避免同一实例的多个同类告警产生通知风暴
+  group_by:
+    - alertname
+    - instance
+
+  # 首次分组等待时间：收到某组第一条告警后，等待 10s 再发送通知
+  # 目的是在该窗口内收集同组其他告警，合并发送以减少通知数量
+  group_wait: 10s
+
+  # 分组更新间隔：对于已发送过通知的告警组，每隔 1m 检查是否有新增/变更告警
+  # 若有变化则发送增量通知；与 group_wait 的区别在于这是针对"已存在分组"的后续更新
+  group_interval: 1m
+
+  # 重复通知间隔：如果告警持续处于 firing 状态且未恢复，每隔 1h 重新发送一次提醒
+  # 防止告警被遗忘，同时避免过于频繁的重复通知
+  repeat_interval: 1h
+
+  # 默认接收器：所有未被子路由匹配的告警都将发送到此接收器
+  receiver: 'dify-webhook'
+
+# ------ 接收器配置（通知渠道定义） ------
+# 以下示例定义了一个基于 Dify Webhook 的 receiver，注意替换其中的url
+receivers:
+  - name: 'dify-webhook'          # 接收器名称，需与 route.receiver 对应
+    webhook_configs:
+      - url: 'http://dify.magedu.com/triggers/webhook/vhqg4KaEu5Qnc_XD9uFW8U9y'  # Webhook 回调地址
+        send_resolved: true       # 告警恢复时也发送通知（resolved 状态）
+                                  # 设为 false 则仅在告警触发(firing)时通知，恢复时静默
