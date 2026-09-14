@@ -1,0 +1,21 @@
+services:
+  prometheus-mcp:
+    image: ghcr.io/tjhop/prometheus-mcp-server:latest
+    container_name: prometheus-mcp
+    environment:
+      # Prometheus Server
+      - PROMETHEUS_MCP_SERVER_PROMETHEUS_URL="http://prometheus.magedu.com:9090"
+      # 默认 transport 实际为 stdio，Docker 网络服务场景需要显式改成 HTTP
+      - PROMETHEUS_MCP_SERVER_MCP_TRANSPORT="http"
+      - PROMETHEUS_MCP_SERVER_WEB_LISTEN_ADDRESS=":8080"
+    extra_hosts:
+      - "prometheus.magedu.com:172.29.0.133"
+    ports:
+      - "9100:8080"
+    restart: unless-stopped
+    networks:
+      - prometheus-mcp-net
+
+networks:
+  prometheus-mcp-net:
+    driver: bridge
