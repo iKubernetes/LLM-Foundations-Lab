@@ -1,9 +1,13 @@
 # MCP 动手实践：基于 Dify 1.17.1 的 MCP Server 端到端验证
 
 > **文档性质**：动手实验教程
+>
 > **适用读者**：Linux 应用运维工程师、SRE、AI Infra / LLMOps 工程师、AI Agent 应用开发者
+>
 > **环境基准**：Dify 1.17.1、MCP Python SDK（当前官方版本）、MCP 协议版本 2025-06-18
+>
 > **文档作者**：马哥教育（http://www.magedu.com）
+>
 > **版权说明：**原创文档，转载必须经过作者同意
 
 ---
