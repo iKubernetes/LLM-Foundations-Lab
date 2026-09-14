@@ -9,14 +9,14 @@ services:
     volumes:
       - ./prometheus/conf:/etc/prometheus:ro
       - ./prometheus/data:/prometheus
-    environment:
-      - VLLM_HOST=http://172.20.1:8000 # 设置变量
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=90d"
       - "--web.enable-lifecycle"
     user: "1000"
+    extra_hosts:
+      - "vllm.magedu.com:172.29.0.165"
     logging:
       driver: "json-file"
       options:

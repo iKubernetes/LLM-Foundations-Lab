@@ -1,7 +1,7 @@
 # vLLM 服务发现目标列表
 # 支持热加载：修改此文件后 Prometheus 会在 refresh_interval 内自动感知，无需重启
 - targets:
-    - "172.29.0.165:8000"
+    - "vllm.magedu.com:8000"
   labels:
     env: "production"           # 可选：附加标签，会合并到采集到的所有指标上
     service: "vllm"             # 可选：便于在 Grafana 中按服务名过滤
