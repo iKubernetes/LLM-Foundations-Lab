@@ -1,21 +1,14 @@
 # 大模型实验手册
 
-> 本实验手册基于AutoDL(http://autodl.com)进行
->
-> 最近一次修订时间：2026年9月15号
->
-> **适用读者**：Linux 应用运维工程师、SRE、AI Infra / LLMOps 工程师、AI Agent 应用开发者
->
-> **版本基准**：MCP 规范 2026-07-28（截至 2026 年 9 月的最新正式版本）
->
-> **文档作者**：马哥教育（http://www.magedu.com）
->
-> **版权说明：**原创文档，转载必须经过作者同意
+> 本实验手册基于AutoDL(http://autodl.com)进行。
+
+> 最近一次修订时间：2026年8月28号。
 
 **实验目标：**
 
-- 在AutoDL上租用GPU实例，部署基于vLLM的Qwen3.5或Qwen3.8本地模型，以及基于Qwen-Embedding的嵌入模型； 
+- 在AutoDL上租用GPU实例，部署基于vLLM的Qwen私有模型； 
 - 部署Open WebUI，接入前面部署的私有化Qwen模型；
+- 使用Prometheus监控部署的私有化Qwen模型，并通过Grafana面板进行展示；
 
 
 
@@ -27,8 +20,10 @@
 
 在AutoDL上开始“创建实例”，选择计费方式、地区、GPU型号和GPU数量。![01-创建GPU服务器实例](./Images/01-创建GPU服务器实例.png)
 
-> 需要注意的是，创建实例时，若使用消费级的GPU，根据算力需求，可选择型号略新一些的，以提供更好的算力性能。例如，若要运行Qwen3.5及以上的版本，建议使用RTX 4090或RTX 5090。
+> 需要注意的是，创建实例时，若使用消费级的GPU，建议选择型号略新一些的，以免它能够支持的驱动和CUDA版本较老，无法运行较新版本的模型。例如，若要运行Qwen3.5及以上的版本，建议使用RTX 4090或RTX 5090。一般来说：
 >
+> - RTX 3090：vllm 0.15.0及其前的版本，能够基于CUDA 12.8及之前的版本，运行Qwen3；
+> - RTX 4090 / 4090D：vllm 0.17.0及后续的版本，能够基于 CUDA 13.0 及之后的版本，运行Qwen3.5；
 
 接着，按需要选择扩充的数据盘空间。需要注意，扩展的空间要小于等于选择的目标主机上可分配的磁盘空间。
 
@@ -184,8 +179,8 @@ vLLM 是一个包含预编译 C++ 和 CUDA 内核的复杂库，官方**强烈�
 首先，创建干净的环境并指定Python版本。根据vLLM官方文档，Python 3.10 至 3.12 是兼容的。这里以 Python 3.12 为例：
 
 ```
-conda create -n vllm python=3.12 -y
-conda activate vllm
+conda create -n vllm_env python=3.12 -y
+conda activate vllm_env
 ```
 
 **步骤 2：使用 Pip 安装 vLLM**
@@ -196,8 +191,8 @@ conda activate vllm
 # 标准安装命令
 pip install vllm
 
-# 指定版本，本示例将直接使用该命令安装vllm
-pip install vllm==0.29.0
+# 指定版本
+pip install vllm==0.15.0
 ```
 
 如果需要指定 CUDA 版本，可以使用 `--extra-index-url` 参数。例如，安装支持 CUDA 12.8 的版本：
@@ -205,8 +200,6 @@ pip install vllm==0.29.0
 ```
 pip install vllm --extra-index-url https://download.pytorch.org/whl/cu128
 ```
-
-> 注意：选择的CUDA版本必须要能被已安装的GPU Driver所兼容，这可以使用命令“nvidia-smi | grep "CUDA Version"”进行验证。
 
 **步骤 3：检查依赖是否存在冲突**
 
@@ -226,7 +219,7 @@ pip list | grep -E 'vllm|torch|transformers|triton|flashinfer'
 
 #### 1.2.3 验证安装的环境
 
- vLLM 安装完成后，可以运行以下 Python 代码来快速验证是否安装成功以及相关的环境：
+安装完成后，可以运行以下 Python 代码来快速验证 vLLM 是否安装成功：
 
 ```
 python - <<'PY'
@@ -246,12 +239,11 @@ PY
 类似上面脚本的运行结果，可能类似如下所示：
 
 ```
-PyTorch: 2.13.0+cu130    # PyTorch 2.13.0，编译时绑定了 CUDA 13.0（cu130 = CUDA 13.0）
-PyTorch CUDA Runtime: 13.0     # PyTorch自带的CUDA runtime库版本（通过pip安装），不依赖系统全局安装的CUDA Toolkit
-CUDA available: True    # PyTorch成功检测到NVIDIA驱动和GPU，CUDA运行时正常工作，意味着nvidia-smi显示的驱动支持CUDA版本 ≥ 13.0
-vLLM: 0.29.0           # 较新的版本，通常要求PyTorch ≥ 2.5 + CUDA ≥ 12.4
-GPU 0: NVIDIA GeForce RTX 4090 D   # 检测到2张RTX 4090 D
-GPU 1: NVIDIA GeForce RTX 4090 D
+PyTorch: 2.9.1+cu128
+CUDA Runtime: 12.8
+CUDA available: True
+vLLM: 0.15.0
+GPU: NVIDIA GeForce RTX 3090
 ```
 
 
@@ -386,39 +378,16 @@ modelscope download --model qwen/Qwen3.5-4B --local_dir ./model/Qwen3.5-4B
    conda activate vllm
    
    # 安装 vllm>=0.19.0
-   pip install vllm==0.29.0
+   pip install vllm=0.25.0
    ```
 
-   > 注意：安装vllm时，务必确保其依赖的CUDA环境不能超出Driver驱动版本可以兼容到的版本；
-   
-   需要特别说明的是，较新版本的vllm，其默认安装的FlashInfer（LLM推理专用的高性能CUDA算子库）的版本通常也较新，例如当前的vllm 0.29.0安装的是0.6.18（可以通过“pip list | grep -i flashinfer”命令验证），此时若CUDA版本较低的话，可能会导致推理服务启动失败，原因如下
-   
-   - FlashInfer 不像传统库那样预编译所有可能的内核组合（因为参数空间太大），而是**会在首次运行时，根据当前GPU架构（如 sm_89）和模型配置动态生成并编译最优 CUDA 代码**，并缓存到 ~/.cache/flashinfer/ 供后续复用；
-   - 而0.6.18版本的FlashInfer首次启动时使用的默认编译选项“--compress-mode=size”是 NVIDIA 在 CUDA 12.8+ 才引入的新版 fatbin 压缩选项，如果 /usr/local/cuda/bin/nvcc 版本低于 12.8，它就无法识别该参数，导致 Ninja 构建失败，进而 vLLM EngineCore 启动崩溃；
-   
-   **解决方案**（选一即可）：
-   
-   - 升级 CUDA Toolkit 到 12.8+（推荐）
-   
-   - 降级 FlashInfer 到兼容旧 CUDA 的版本
-   
-   - 禁用 FlashInfer Sampling（临时绕过）
-   
-     ```
-     export VLLM_USE_FLASHINFER_SAMPLER=0
-     ```
-   
-   - 手动安装编译好的缺失内核
-   
-     ```bash
-     # 首先检查缺失的内核
-     flashinfer show-config
-     
-     # 而后手动安装缺失的内核，注意其必须与此前pip安装时自动安装的CUDA Runtime版本一致
-     flashinfer download-kernels --cuda-version 13.0
-     ```
-   
-     
+   > 注意：安装vllm时，务必确保其依赖的CUDA环境不能超出Driver驱动版本可以兼容到的版本。另外，在AutoDL上，由于系统级的CUDA版本较低，若不手动升级，则应该声明环境变量来规避 FlashInfer sampler在启动时引用本地 CUDA JIT时的问题。
+   >
+   > ```bash
+   > export VLLM_USE_FLASHINFER_SAMPLER=0
+   > ```
+
+
 
 1. **最简单的启动方式**（不推荐）
 
@@ -487,7 +456,6 @@ modelscope download --model qwen/Qwen3.5-4B --local_dir ./model/Qwen3.5-4B
    - --dtype：模型的参数类型，可用值通常包括float16、bfloat16、float32、auto等； 
    - --trust-remote-code：某些 Hugging Face 模型包含自定义 Python 代码，该选项表示允许执行这些代码；但通常不应该无条件给所有未知模型开启该能力；
    - --reasoning-parser：对于支持 reasoning 输出格式的模型，为其指定解析器；例如Qwen的某些版本支持“qwen3”；这属于模型特定能力参数，不是所有模型都必须设置；
-   - --default-chat-template-kwargs  '{"enable_thinking":false}'：聊天模板默认参数，用于关闭思考模式：模型不会生成思考的内容，而是直接输出最终回答，适合不需要 CoT 的场景以降低延迟和 token 消耗；
 
    
 
@@ -537,7 +505,7 @@ modelscope download --model qwen/Qwen3.5-4B --local_dir ./model/Qwen3.5-4B
 
    
 
-5. 更完整的 Qwen3.5-4B 模型推理服务启动示例
+5. 比较完整的 Qwen3.5-4B 示例
 
    若当前环境和模型版本已经确认支持 Qwen3 reasoning parser，可以使用类似如下命令：
 
@@ -648,11 +616,106 @@ graph LR
     style RemoteServer2 fill:#e1d5e7,stroke:#9673a6
 ```
 
-2. 使用AutoDL为容器开放的两个端口（目前仅部分可用区提供，例如“西北B区”提供，而“内蒙B区”就未提供）
+2. 使用AutoDL为容器开放的端口
 
    ![07-2-打通服务隧道](./Images/07-2-打通服务隧道.png)
 
 ​		启动vLLM时，设置其监听于6006或6008端口，即使用图片中对应右向箭头（→）后的地址通过互联网来访问相应的服务。
+
+
+
+### 1.4 注意事项
+
+在AutoDL上使用“Miniconda / conda3 / 3.10(ubuntu 22.04) / 11.8”镜像时，可能会存在问题。首先，nvidia-smi 的 CUDA版本并非指代容器里的 CUDA Toolkit，它仅代表当前 NVIDIA Driver 具备运行最高到该 CUDA 版本构建程序的兼容能力，而并不意味着容器时一定安装了该版本的CUDA。
+
+例如下面由nvidia-smi命令返回的所示，它代表驱动版本 580.76.05 最高可兼容到 13.0 版本的CUDA，而并不代表当前系统上安装了13.0版本的CUDA工具（/usr/local/cuda-13.0/bin/nvcc）。
+
+```
+NVIDIA-SMI 580.76.05  Driver Version: 580.76.05   CUDA Version: 13.0
+```
+
+但是，我们一旦安装vLLM/PyTorch，则很可能会安装与选择的vLLM匹配的版本的CUDA相关的系列包，而该CUDA系列包的相关版本很可能与系统上的CUDA版本并不统一。例如，一个 RTX 4090D 的实例选择使用“Miniconda / conda3 / 3.10(ubuntu 22.04) / 11.8”镜像，并选择安装 vllm 0.21.0 版本时，安装了 CUDA 13 系列包，于是整个系统环境便如下示意图所示，其运行vllm时大概率会遇到问题。
+
+```
+GPU
+RTX 4090D
+   │
+   ▼
+Driver 580.76.05
+支持 CUDA 13
+   │
+   ├─────────────────────────────┐
+   │                             │
+   ▼                             ▼
+Python 虚拟环境               容器系统环境
+PyTorch 2.11 cu130            /usr/local/cuda
+vLLM 0.21                     ↓
+FlashInfer 0.6.8              CUDA Toolkit 11.8
+CUDA Runtime 13               nvcc 11.8
+   │                             │
+   └──────────────┬──────────────┘
+                  ▼
+             JIT 编译 CUDA
+                  💥
+```
+
+主要原因是，很多 Python CUDA wheel 自己带了运行所需要的 CUDA libraries，但是 vLLM 大量依赖 FlashInfer、Triton、CUTLASS、Torch extensions和各种 动态/JIT Kernel，而这些组件却可能依赖于nvcc、ptxas、nvvm、CUDA headers、CCCL、CUB和libcu++。也就是说，运行 CUDA 程序只需要 Runtime，但编译 CUDA 程序则需要完整且版本一致的 CUDA Development Toolchain。
+
+因此，上面的环境将可能存在三种情况：
+
+- NVIDIA Driver 580 + CUDA Toolkit 11.8：二者并不冲突，新驱动运行旧 CUDA 程序是 NVIDIA 非常常见的兼容模式。
+- 安装的是一套真正针对 CUDA 11.8 构建的 vLLM/PyTorch：二者在理论上也不冲突，它相当在系统上存在一套 Driver 580 + Toolkit 11.8 + Runtime 11.8 + JIT Toolchain 11.8 的环境。
+- 安装vLLM较新的版本时，同时又安装了较新Torch（它依赖的较新版本的CUDA）：例如，要安装 vllm 0.21 时会自动安装 Torch 2.11 cu130，它便于期望使用 CUDA 13 版本，但系统本身存在的是 CUDA 11.8 版本。一旦需要 JIT 编译，非常容易调用到错误的 CUDA 11.8 toolchain。
+
+这里的主要原因是，Conda 并不能隔离 /usr/local/cuda，它仅用于隔离Python，但并不能天然隔离 CUDA system toolchain。
+
+为了更易于理解这些组件间的层次结构和依赖关系，使用vllm时，建议牢记如下层级体系。
+
+```
+L1 NVIDIA Driver
+        │
+        │ 例如 580.76
+        ▼
+L2 CUDA Runtime
+        │
+        │ 例如 PyTorch cu130
+        ▼
+L3 CUDA Development Toolchain
+        │
+        ├─ nvcc
+        ├─ ptxas
+        ├─ nvvm / cicc
+        ├─ headers
+        ├─ CCCL
+        └─ CUDA_HOME
+        ▼
+L4 AI 软件栈
+        ├─ PyTorch
+        ├─ vLLM
+        ├─ FlashInfer
+        ├─ Triton
+        └─ CUTLASS
+```
+
+因此，使用较新版本的vllm时，例如前面提到的vllm 0.21.0，推荐重点考虑的组合如下：
+
+| 方案                                   | 建议  | 原因                     |
+| -------------------------------------- | ----- | ------------------------ |
+| **CUDA 13 基础镜像 + vLLM 0.21**       | ⭐⭐⭐⭐⭐ | 最干净                   |
+| 官方 vLLM Docker 镜像                  | ⭐⭐⭐⭐⭐ | 版本组合由项目维护       |
+| AutoDL CUDA 11.8 镜像里 pip 拼 CUDA 13 | ⭐⭐    | 容易出现问题，但可以解决 |
+
+> 注意：安装vllm时，务必确保其依赖的CUDA环境不能超出Driver驱动版本可以兼容到的版本。
+
+还有一种可能比这些都简单，那就是直接使用 vLLM 官方容器镜像，这样子 vllm 就完全不依赖于系统级的CUDA环境，而是完全由镜像内的环境提供。但这意味着系统环境要支持创建并运行容器，并且VIDIA Driver 支持面向容器的 GPU passthrough。
+
+但针对 AutoDL 这个 CUDA 11.8 镜像最稳妥的做法是把 vLLM 运行栈固定在 cu130，但显式禁用 FlashInfer sampler，避免它在启动时做本地 CUDA JIT。vLLM 0.21.0 官方专门提供了一个环境变量来实现该功能：
+
+```bash
+export VLLM_USE_FLASHINFER_SAMPLER=0
+```
+
+它会避免调用系统上的CUDA，从而绕过类似 FlashInfer JIT 问题。
 
 
 
@@ -932,52 +995,9 @@ curl http://localhost:8000/v1/embeddings \
 
 
 
-## 附录：GPU Driver和CUDA
 
 
-
-
-
-### 安装GPU Exporter
-
-```bash
-# 下载keyring包
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-
-# 安装
-dpkg -i cuda-keyring_1.1-1_all.deb
-```
-
-
-
-```bash
-# 添加仓库
-cat >/etc/apt/sources.list.d/cuda-ubuntu2204-x86_64.list <<'EOF'
-deb [signed-by=/usr/share/keyrings/cuda-archive-keyring.gpg] https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /
-EOF
-```
-
-
-
-```bash
-# 更新仓库元数据
-apt update 
-
-# 安装
-CUDA_VERSION=13
-
-apt-get install --yes \
-  --install-recommends \
-  datacenter-gpu-manager-4-cuda${CUDA_VERSION}
-```
-
-
-
-
-
-
-
-
+## 附录：安装GPU Driver和CUDA
 
 
 
