@@ -1,23 +1,60 @@
-# LiteLLM Proxy
+# LiteLLM Proxy 模型路由配置
 
 model_list:
-  # 1. 主推理模型 (Qwen3-8B)
-  - model_name: qwen3
+  # 1. 主推理模型：供 Dify 的 LLM、Agent 和 Workflow 节点调用
+  - model_name: qwen3                  # LiteLLM 对外暴露的统一模型名称
     litellm_params:
-      model: openai/qwen3
-      #api_base: https://u492360-ac4b-dafc1fae.westc.seetacloud.com:8443/v1
-      api_base: http://172.21.0.1:8000/v1
-      api_key: "EMPTY"
+      model: openai/qwen3              # 使用 OpenAI 兼容接口调用后端模型
+      # 后端qwen3推理模型的地址，请按需修改
+      api_base: https://u492360-a5b8-a3bf5850.westc.seetacloud.com:8443/v1
+      api_key: "EMPTY"                 # vLLM 未启用 API Key 鉴权时使用占位值
+
+      # 仅用于 LiteLLM 成本统计，不代表实际收费
+      input_cost_per_token: 0.0000018  # 输入成本：1.8 / 1M tokens
+      output_cost_per_token: 0.0000028 # 输出成本：2.8 / 1M tokens
+
     model_info:
-      max_tokens: 16384
+      max_tokens: 16384                # 向上层声明的最大输出 Token 数
+
+  # 2. Embedding 模型：供 Dify 知识库索引和向量检索使用
+  - model_name: qwen3-embedding        # Dify 中填写的 Embedding 模型名称
+    litellm_params:
+      model: openai/qwen3-embedding    # 后端 OpenAI 兼容接口中的模型名称
+      # 后端qwen3-embedding嵌入模型的地址，请按需修改
+      api_base: https://uu492360-a5b8-a3bf5850.westc.seetacloud.com:8443/v1
+      api_key: "EMPTY"                 # 后端未启用鉴权时使用占位值
+
+      # 用于 LiteLLM 统计 Embedding 调用成本
+      input_cost_per_token: 0.0000012  # 输入成本：1.2 / 1M tokens
+      # Embedding 接口通常没有输出 Token 计费，可不配置此项
+      # output_cost_per_token: 0.0000020
+
+    model_info:
+      description: "本地部署的文本向量模型"
+      supports_embedding: true         # 声明该模型支持 Embedding
+
+# LiteLLM 运行与可观测性设置
+litellm_settings:
+  # 启用 Prometheus 指标采集回调
+  callbacks:
+    - prometheus
+  # 允许 Prometheus 不携带 Authorization 访问 /metrics
+  require_auth_for_metrics_endpoint: false
+
 
 general_settings:
+  # 不使用 LiteLLM 内置的虚拟 Key 管理功能
   disable_key_management: true
+  # 返回 OpenAI SDK 兼容的响应对象
   return_openai_object: true
-  #disable_spend_logs: true
-  #store_model_in_db: false
 
-# 日志
+  # 如不需要成本和调用记录，可取消注释
+  # disable_spend_logs: true
+  # 如不希望从数据库加载模型配置，可取消注释
+  # store_model_in_db: false
+
+
+# LiteLLM Proxy 日志配置
 logging:
-  level: INFO
-  log_file: /app/logs/litellm.log
+  level: INFO                          # 生产环境常用 INFO，排障时可临时改为 DEBUG
+  log_file: /app/logs/litellm.log     # 容器内日志文件路径
