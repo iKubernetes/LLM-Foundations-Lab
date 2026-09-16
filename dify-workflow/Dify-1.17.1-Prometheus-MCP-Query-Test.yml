@@ -1,0 +1,165 @@
+app:
+  description: 使用独立 Tool 节点验证 Dify 到 prometheus-mcp 再到 Prometheus 的查询链路
+  icon: 📊
+  icon_background: '#E4FBCC'
+  icon_type: emoji
+  mode: workflow
+  name: Prometheus MCP Query Test
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.7.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload: {}
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: tool
+      id: start-source-prometheus-query-target
+      source: start
+      sourceHandle: source
+      target: prometheus-query
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: tool
+        targetType: end
+      id: prometheus-query-source-end-target
+      source: prometheus-query
+      sourceHandle: source
+      target: end
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        desc: 输入一条 PromQL；默认查询 vllm 监控目标是否可用
+        selected: false
+        title: 开始
+        type: start
+        variables:
+        - default: up{job="vllm"}
+          hint: 例如 up、up{job="vllm"} 或 vllm:num_requests_waiting{job="vllm"}
+          label: PromQL
+          max_length: 2048
+          options: []
+          placeholder: up{job="vllm"}
+          required: true
+          type: paragraph
+          variable: query
+      height: 153
+      id: start
+      position:
+        x: 745.5
+        y: 244
+      positionAbsolute:
+        x: 745.5
+        y: 244
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        desc: 直接调用 prometheus-mcp 的 query 工具，不经过 LLM 或 Agent
+        is_team_authorization: false
+        output_schema: null
+        paramSchemas:
+        - auto_generate: null
+          default: null
+          form: llm
+          human_description:
+            en_US: PromQL instant query to execute against Prometheus.
+            zh_Hans: 要在 Prometheus 上执行的即时 PromQL 查询。
+          label:
+            en_US: Query
+            zh_Hans: PromQL
+          llm_description: PromQL instant query expression.
+          max: null
+          min: null
+          name: query
+          options: []
+          placeholder: null
+          precision: null
+          required: true
+          scope: null
+          template: null
+          type: string
+        params: {}
+        provider_id: prometheus-mcp
+        provider_name: prometheus-mcp
+        provider_type: mcp
+        selected: false
+        title: Prometheus 即时查询
+        tool_configurations: {}
+        tool_description: 执行 PromQL 即时查询并返回 Prometheus API 查询结果
+        tool_label: query
+        tool_name: query
+        tool_node_version: '2'
+        tool_parameters:
+          query:
+            type: mixed
+            value: '{{#start.query#}}'
+        type: tool
+      height: 128
+      id: prometheus-query
+      position:
+        x: 908.5
+        y: 59.5
+      positionAbsolute:
+        x: 908.5
+        y: 59.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        desc: 返回 prometheus-mcp query 工具的原始文本输出
+        outputs:
+        - value_selector:
+          - prometheus-query
+          - json
+          value_type: array[object]
+          variable: text
+        selected: true
+        title: 结束
+        type: end
+      height: 133
+      id: end
+      position:
+        x: 1119.5
+        y: 208
+      positionAbsolute:
+        x: 1119.5
+        y: 208
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    viewport:
+      x: -1234
+      y: 68
+      zoom: 2
+  rag_pipeline_variables: []

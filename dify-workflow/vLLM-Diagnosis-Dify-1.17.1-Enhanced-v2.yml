@@ -1,0 +1,786 @@
+agent_packages:
+  agent_1:
+    metadata:
+      description: ''
+      icon: null
+      icon_background: null
+      icon_type: null
+      name: vLLM RCA Agent Enhanced v2
+      role: ''
+    omitted_assets: []
+    schema_version: 1
+    soul:
+      app_features:
+        file_upload:
+          allowed_file_extensions:
+          - JPG
+          - JPEG
+          - PNG
+          - GIF
+          - WEBP
+          - SVG
+          allowed_file_types:
+          - document
+          - image
+          - audio
+          - video
+          allowed_file_upload_methods:
+          - local_file
+          - remote_url
+          enabled: true
+          image:
+            enabled: true
+          number_limits: 3
+        opening_statement: null
+        retriever_resource: null
+        sensitive_word_avoidance: null
+        speech_to_text: null
+        suggested_questions: null
+        suggested_questions_after_answer: null
+        text_to_speech: null
+      app_variables: []
+      config_files: []
+      config_note: ''
+      config_skills: []
+      env:
+        secret_refs: []
+        variables: []
+      human:
+        contacts: []
+        tools: []
+      knowledge:
+        sets: []
+      memory:
+        artifacts: []
+        budget: null
+        scope: null
+      misc_legacy:
+        file_upload:
+          allowed_file_extensions:
+          - JPG
+          - JPEG
+          - PNG
+          - GIF
+          - WEBP
+          - SVG
+          allowed_file_types:
+          - document
+          - image
+          - audio
+          - video
+          allowed_file_upload_methods:
+          - local_file
+          - remote_url
+          enabled: true
+          image:
+            enabled: true
+          number_limits: 3
+        opening_statement: null
+        retriever_resource: null
+        sensitive_word_avoidance: null
+        speech_to_text: null
+        suggested_questions: null
+        suggested_questions_after_answer: null
+        text_to_speech: null
+      model:
+        credential_ref: null
+        model: qwen3
+        model_provider: langgenius/openai_api_compatible/openai_api_compatible
+        model_settings:
+          frequency_penalty: null
+          max_tokens: null
+          presence_penalty: null
+          response_format: null
+          stop: null
+          temperature: null
+          top_p: null
+        plugin_id: langgenius/openai_api_compatible
+      prompt:
+        system_prompt: "你是一名负责 vLLM 推理平台运行状态诊断的 SRE 工程师。你会同时收到：AlertManager 单条告警的规范化字段、vLLM-RCA-Runbook 知识库检索结果，以及可按需调用的 Prometheus\
+          \ MCP 只读工具。\n\n你的任务不是复述告警，也不是凭告警名或 Runbook 猜测根因，而是先利用 Runbook 形成诊断路径和待验证假设，再读取 Prometheus 实际规则、目标、时间序列和必要的元数据，完成证据驱动的初步\
+          \ RCA。\n\n【Runbook、规则与实时证据的职责边界】\n- Runbook 用于理解告警语义、定位章节、确定诊断顺序、生成根因假设、推荐 PromQL、识别关联告警和历史模式。\n- Runbook 是静态先验，不代表本次环境已出现其中描述的根因；历史案例不能直接作为本次故障证据。\n\
+          - Prometheus 当前实际加载的 alerting/recording rules 是本环境告警条件、表达式、阈值、for 持续时间等信息的优先事实来源。\n- Prometheus MCP 本次实际返回的数据，是判断告警状态和验证根因假设的主要实时证据。\n\
+          - 禁止因为 Runbook 中列出某个可能根因，就直接认定本次故障由该原因导致。\n- 如果知识检索未命中、内容不相关或互相冲突，必须明确说明，并仍可依据告警字段、Prometheus rules 和实时数据进行有限诊断。\n\
+          - Runbook 中出现的命令或变更措施只能作为建议，不得执行。\n\n【可用工具：共 9 个，只读】\n1. list_targets：检查 Prometheus 监控目标及健康状态。\n2. list_rules：读取当前实际加载的\
+          \ alerting/recording rules，用于确认真实告警表达式、阈值、for、labels 与 annotations。\n3. query：执行 PromQL 即时查询。\n4. range_query：查询一段时间内的指标趋势。\n\
+          5. list_alerts：读取当前活跃告警，用于按需建立同一 incident 的关联告警上下文。\n6. series：按 matcher 发现真实存在的时间序列。\n7. label_values：发现某个 label\
+          \ 的真实取值，核对 job/instance/model/pod 等标签。\n8. metric_metadata：确认 metric 类型、HELP 与 unit，避免 Counter/Gauge/Histogram 误用。\n\
+          9. targets_metadata：查看某 target 实际抓取到的 metric 元数据，辅助指标发现。\n\n严禁使用任何写入、reload、quit、delete_series、clean_tombstones、snapshot\
+          \ 或其它生产变更/管理类工具。\n\n核心诊断链：告警规范化 → Runbook 定位 → 读取真实规则 → 生成 H1/H2/H3 → 确认 target → 对齐 StartsAt → 查询当前值与时间趋势 → 必要时做指标/标签自适应发现与关联告警分析\
+          \ → 验证或排除假设 → 输出证据化诊断。\n\n一、证据优先原则\n1. 所有关键判断必须尽量基于本次 Prometheus MCP 实际返回的数据。\n2. AlertManager 告警文本只能证明“监控系统发出了告警”，不能单独证明异常仍存在或某个根因成立。\n\
+          3. 不得根据经验、模型记忆或 Runbook 编造指标值、请求量、延迟、错误率、GPU 状态或根因。\n4. 不得声称已检查某个指标、规则或告警，除非本次实际调用工具获取过对应信息。\n5. 某次 PromQL 无结果不等于该类指标不存在；只能说“本次查询未获得该指标数据”，并按自适应发现策略继续核对。\n\
+          6. 报告中的数值结论必须能追溯到实际 Tool Result。\n7. 告警阈值、表达式与 for 持续时间优先以 list_rules 返回的当前加载规则为准；Runbook 或 annotation 中的值用于交叉核对，如不一致必须指出。\n\
+          \n二、对象、标签与时间约束\n8. 优先使用告警提供的 job、instance、service、namespace、pod、model 等标签限定查询对象，不得擅自替换。\n9. 对 firing 告警，优先用 list_targets\
+          \ 确认对应 target 是否健康；若标签映射不一致，明确指出，不得强行认定为同一对象。\n10. 优先读取 StartsAt。验证原告警时，性能类告警的 range_query 窗口应尽量覆盖 StartsAt 前 5\
+          \ 分钟至 StartsAt 后 10 分钟。\n11. 若告警当前仍 firing，可额外查询最近 5～10 分钟判断当前是否仍异常。\n12. 必须区分“告警触发时是否异常”与“当前是否仍异常”。窗口未覆盖 StartsAt\
+          \ 时，不得用该数据证明原告警成立或不成立。\n13. 若输入提示 AlertManager payload 中包含多条告警，本 Workflow 仍只诊断第一条；必须在最终报告中明确告知 alert_count 及“仅处理第一条”，不得暗示已诊断全部告警。\n\
+          \n三、PromQL、单位和数值规则\n14. 报告中引用的 PromQL 必须与实际 Tool Call 完全一致。\n15. 正确解释 rate、increase、histogram_quantile 等函数，不得擅自改变单位或把\
+          \ histogram count rate 直接称为业务吞吐量。\n16. histogram bucket 是累计 bucket；P95/P99 优先用 histogram_quantile 计算。没有恰好对应阈值的 bucket\
+          \ 时，不得伪造精确的超阈值请求比例。\n17. NaN 只表示该时间点没有有效数值。除非另有 up=0 或 scrape 失败等证据，不得解释为服务中断；原因应标为待确认。\n18. 若真实告警规则给出阈值，比较实际值与阈值并检查方向；阈值未知时只能报告实际值并标明“告警阈值未知”。\n\
+          \n四、PromQL 自适应发现策略\n19. 不得仅根据 Runbook 假定某个 metric 或 label 一定存在。\n20. 推荐 PromQL 无数据时，按以下顺序处理：\n    a) 先检查 selector、job、instance、namespace、pod、model\
+          \ 等标签是否与告警及 target 一致；\n    b) 必要时使用 series 或 label_values 发现实际存在的时间序列和标签取值；\n    c) 使用 targets_metadata 判断目标是否实际暴露相关\
+          \ metric；\n    d) 使用 metric_metadata 核对 metric 类型、HELP、unit；\n    e) 只有完成必要核对后，才可判定“当前无法获得该指标证据”。\n21. 不得因为指标名称相似就直接认为语义等价。采用替代指标时，必须说明“原推荐指标\
+          \ → 实际替代指标 → 替代依据”。\n22. 在使用 rate/increase/histogram_quantile 前，若指标类型存在疑问，应先通过 metric_metadata 核对；不得把 Counter、Gauge、Histogram\
+          \ 混用。\n23. 指标发现工具只在“无数据、标签不明、指标语义不明、版本差异”时按需使用，避免无目的扫描全部 metrics/series/labels。\n\n五、关联告警分析\n24. list_alerts 不是默认必调工具；仅在需要建立\
+          \ incident context、验证上下游症状或当前存在多个相关告警时调用。\n25. 关联告警优先按相同或高度相关的 instance/job/service/namespace/pod/model/layer 以及相近时间窗口筛选。\n\
+          26. 可利用关联告警的 StartsAt 顺序辅助构建时间链，但“先发生”不等于“导致后发生”，不得仅凭时间先后认定因果。\n27. 关联告警只能作为旁证；最终根因仍需由指标、规则、目标状态或其它实时证据支持。\n\n六、vLLM\
+          \ 性能告警诊断策略\n根据告警类型只查询最相关指标。通用因果链为：请求负载 → Running/Waiting Requests → Queue → TTFT → TPOT → E2E Latency → KV Cache\
+          \ → 吞吐/错误率 → GPU/Prefill/输入特征。\n\n对 VLLMHighTTFT、HighVLLMTimeToFirstToken 或同类 TTFT 告警，优先：\n1. 从 list_rules 核对真实规则表达式、阈值与\
+          \ for；\n2. 确认 TTFT 当前值、P95/P99、告警窗口趋势和阈值；\n3. 查询 Waiting Requests、Running Requests 与 Queue；\n4. 查询 KV Cache、缓存压力和并发上限；\n\
+          5. 查询请求速率、Prompt/Input Tokens、并发及输入长度变化；\n6. 如存在指标无数据或标签不明，再进入 PromQL 自适应发现；\n7. 如需要判断是否为同一 incident，再按需调用 list_alerts；\n\
+          8. 仍无法解释时，再建议补充 GPU、Prefill 或日志证据。\n\n七、假设验证、工具分层与调用预算\n28. 不要堆砌可能原因。对最相关的 1～3 个假设标记“支持 / 不支持 / 未验证”，并给出实际证据。\n\
+          29. 只有被实时证据支持的原因才能称为“最可能原因”。如果只能确认异常，应明确说“告警已被监控数据验证，但当前证据不足以进一步确定根因”。\n30. Tool 使用遵循分层策略，不要把 9 个工具全部默认调用：\n   \
+          \ - Tier 1（通常优先）：list_rules、list_targets、query。\n    - Tier 2（按诊断需要）：range_query、list_alerts。\n    - Tier 3（仅在无数据/标签不明/指标语义不明时）：series、label_values、metric_metadata、targets_metadata。\n\
+          31. 每一次 Tool Call 都必须能回答一个明确的诊断问题；如果返回结果已经足以支持/排除假设，不要继续为“凑完整”而调用工具。\n32. 为控制 Qwen3 的上下文负担，查询应尽量限定对象、标签和时间范围；避免无筛选地返回大规模\
+          \ rules、alerts、series 或 metadata。\n33. 原则上执行 2～8 次 Prometheus 工具调用，硬上限 10 次；若告警明显不成立，可以少于 2 次结束。\n34. 已找到被证据支持的主要原因、确认指标不足、无法验证告警或达到\
+          \ 10 次调用时停止。\n35. 只允许观察、查询和诊断，不执行修复、重启、扩缩容、参数修改或任何生产变更。\n\n最终严格按以下结构输出：\n【告警信息】告警名称、instance、job、severity、status、StartsAt、runbook_hint、alert_count、是否仅处理第一条、告警阈值（若已知）。\n\
+          【Runbook 命中与诊断计划】命中章节/条目、诊断路径、本次 H1/H2/H3；若未命中或内容不相关，明确说明。\n【真实告警规则】列出通过 list_rules 实际确认的规则表达式、阈值、for、关键 labels/annotations；未查到则说明。\n\
+          【监控目标状态】target 是否健康及标签是否一致。\n【实际工具调用】按顺序列出真正调用过的工具；对 query/range_query 列出实际 PromQL 和查询窗口；不得列未调用工具。\n【监控事实】只列 Tool\
+          \ Result 实际返回的数据，不加入推测。\n【关联告警】仅在实际调用 list_alerts 时输出相关告警、对象与时间关系，并明确“时间相关不等于因果”；未调用则写“本次未需要调用”。\n【时间一致性判断】窗口是否覆盖\
+          \ StartsAt、触发时是否异常、当前是否仍异常。\n【根因假设】逐一标记支持、不支持或未验证，并给出证据。\n【诊断结论】告警是否被数据支持、当前是否仍异常、最可能问题、置信度（高/中/低）；无法确定时明确说明证据不足。\n\
+          【尚未验证】列出缺少证据的问题。\n【建议进一步检查】只给下一步观测或验证项，不执行修复。"
+      sandbox:
+        config:
+          cpu: null
+          env: []
+          image: null
+          working_dir: null
+        provider: null
+      schema_version: 1
+      tools:
+        cli_tools: []
+        dify_tools:
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: list_targets
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: list_rules
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: query
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: range_query
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: list_alerts
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: series
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: label_values
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: metric_metadata
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: targets_metadata
+    workspace_skills: []
+app:
+  description: 基于 Runbook RAG、Prometheus MCP 九个只读工具与自适应 PromQL 发现策略的单条 vLLM 告警智能诊断工作流
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  icon_type: emoji
+  mode: workflow
+  name: vLLM-Diagnosis-Enhanced-v2
+  use_icon_as_answer_icon: false
+dependencies:
+- current_identifier: null
+  type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/openai_api_compatible:0.0.66@51801b51069b2578c3fcf6d38edc45c45efd8b7ef4fdb25f096bd84d4f95a53d
+    version: null
+kind: app
+version: 0.7.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload: {}
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: trigger-webhook
+        targetType: code
+      id: 1789192668812-source-1789205076746-target
+      source: '1789192668812'
+      sourceHandle: source
+      target: '1789205076746'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: if-else
+      id: 1789205076746-source-1789264840270-target
+      source: '1789205076746'
+      sourceHandle: source
+      target: '1789264840270'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: end
+      id: 1789264840270-false-1789280000003-target
+      source: '1789264840270'
+      sourceHandle: 'false'
+      target: '1789280000003'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: knowledge-retrieval
+      id: 1789264840270-true-1789280000001-target
+      source: '1789264840270'
+      sourceHandle: 'true'
+      target: '1789280000001'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: knowledge-retrieval
+        targetType: agent
+      id: 1789280000001-source-1789271471602-target
+      source: '1789280000001'
+      sourceHandle: source
+      target: '1789271471602'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: agent
+        targetType: end
+      id: 1789271471602-source-1789265518345-target
+      source: '1789271471602'
+      sourceHandle: source
+      target: '1789265518345'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        async_mode: true
+        body: []
+        content_type: application/json
+        headers: []
+        method: POST
+        params: []
+        response_body: ''
+        selected: false
+        status_code: 200
+        title: Webhook 触发器
+        type: trigger-webhook
+        variables:
+        - label: raw
+          required: true
+          value_selector: []
+          value_type: object
+          variable: _webhook_raw
+        webhook_debug_url: ''
+        webhook_url: ''
+      height: 130
+      id: '1789192668812'
+      position:
+        x: -1630
+        y: -1450
+      positionAbsolute:
+        x: -1630
+        y: -1450
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        code: "import json\n\ndef _as_dict(value):\n    if isinstance(value, dict):\n        return value\n    if isinstance(value,\
+          \ str):\n        try:\n            parsed = json.loads(value)\n            return parsed if isinstance(parsed, dict)\
+          \ else {}\n        except Exception:\n            return {}\n    return {}\n\ndef _text(value, default=\"\"):\n\
+          \    if value is None:\n        return default\n    if isinstance(value, (dict, list)):\n        return json.dumps(value,\
+          \ ensure_ascii=False)\n    return str(value)\n\ndef main(payload: dict) -> dict:\n    envelope = _as_dict(payload)\n\
+          \    body = _as_dict(envelope.get(\"body\", envelope))\n    alerts = body.get(\"alerts\", [])\n    if not isinstance(alerts,\
+          \ list):\n        alerts = []\n\n    alert_count = len(alerts)\n    alert = alerts[0] if alert_count and isinstance(alerts[0],\
+          \ dict) else {}\n    multi_alert_warning = (\n        f\"本次 AlertManager payload 共包含 {alert_count} 条告警；本 Workflow\
+          \ 仅诊断第一条告警，其余 {max(alert_count - 1, 0)} 条未在本次执行中逐条诊断。\"\n        if alert_count > 1 else \"\"\n    )\n    labels\
+          \ = _as_dict(alert.get(\"labels\", {}))\n    annotations = _as_dict(alert.get(\"annotations\", {}))\n\n    group_status\
+          \ = _text(body.get(\"status\", \"unknown\"), \"unknown\")\n    alert_status = _text(alert.get(\"status\", group_status),\
+          \ group_status)\n    receiver = _text(body.get(\"receiver\", \"\"))\n    alert_name = _text(labels.get(\"alertname\"\
+          , \"unknown\"), \"unknown\")\n    severity = _text(labels.get(\"severity\", \"unknown\"), \"unknown\")\n    instance\
+          \ = _text(labels.get(\"instance\", \"unknown\"), \"unknown\")\n    job = _text(labels.get(\"job\", \"unknown\"),\
+          \ \"unknown\")\n    service = _text(labels.get(\"service\", labels.get(\"app\", \"\")))\n    layer = _text(labels.get(\"\
+          layer\", labels.get(\"component\", \"\")))\n    namespace = _text(labels.get(\"namespace\", \"\"))\n    pod = _text(labels.get(\"\
+          pod\", \"\"))\n    model = _text(labels.get(\"model\", labels.get(\"served_model_name\", \"\")))\n    summary =\
+          \ _text(annotations.get(\"summary\", \"\"))\n    description = _text(annotations.get(\"description\", \"\"))\n \
+          \   runbook_hint = _text(annotations.get(\"runbook_hint\", labels.get(\"runbook_hint\", \"\")))\n    starts_at =\
+          \ _text(alert.get(\"startsAt\", \"\"))\n    ends_at = _text(alert.get(\"endsAt\", \"\"))\n    generator_url = _text(alert.get(\"\
+          generatorURL\", \"\"))\n    fingerprint = _text(alert.get(\"fingerprint\", \"\"))\n\n    alert_text = \"\\n\".join([\n\
+          \        f\"AlertName: {alert_name}\", f\"GroupStatus: {group_status}\",\n        f\"AlertStatus: {alert_status}\"\
+          , f\"Severity: {severity}\",\n        f\"Instance: {instance}\", f\"Job: {job}\", f\"Service: {service}\",\n   \
+          \     f\"Layer: {layer}\", f\"Namespace: {namespace}\", f\"Pod: {pod}\",\n        f\"Model: {model}\", f\"Summary:\
+          \ {summary}\",\n        f\"Description: {description}\", f\"RunbookHint: {runbook_hint}\",\n        f\"StartsAt:\
+          \ {starts_at}\", f\"EndsAt: {ends_at}\",\n        f\"GeneratorURL: {generator_url}\", f\"Fingerprint: {fingerprint}\"\
+          ,\n        f\"MultiAlertWarning: {multi_alert_warning}\"\n    ])\n\n    hint_anchor = f\"Runbook §{runbook_hint}\"\
+          \ if runbook_hint else \"Runbook 章节未知\"\n    rag_query = \"\\n\".join([\n        \"请检索与以下单条推理平台告警最相关的诊断知识：\",\n\
+          \        f\"alert_name: {alert_name}\", f\"runbook_anchor: {hint_anchor}\",\n        f\"runbook_hint: {runbook_hint}\"\
+          , f\"layer: {layer}\",\n        f\"service: {service}\", f\"instance: {instance}\", f\"job: {job}\",\n        f\"\
+          severity: {severity}\", f\"model: {model}\", f\"summary: {summary}\",\n        f\"description: {description}\",\n\
+          \        \"检索目标：对应 Runbook 条目、诊断决策树、主要根因候选、鉴别指标与 PromQL、关联告警、实时验证方法、处置边界及历史事故案例。\"\n    ])\n\n    return {\n   \
+          \     \"status\": group_status, \"alert_status\": alert_status,\n        \"receiver\": receiver, \"alert_count\"\
+          : alert_count,\n        \"alert_name\": alert_name, \"severity\": severity,\n        \"instance\": instance, \"\
+          job\": job, \"service\": service,\n        \"layer\": layer, \"namespace\": namespace, \"pod\": pod,\n        \"\
+          model\": model, \"summary\": summary, \"description\": description,\n        \"runbook_hint\": runbook_hint, \"\
+          starts_at\": starts_at,\n        \"ends_at\": ends_at, \"generator_url\": generator_url,\n        \"fingerprint\"\
+          : fingerprint, \"multi_alert_warning\": multi_alert_warning,\n        \"labels_json\": json.dumps(labels, ensure_ascii=False,\
+          \ sort_keys=True),\n        \"annotations_json\": json.dumps(annotations, ensure_ascii=False, sort_keys=True),\n\
+          \        \"alert_text\": alert_text, \"rag_query\": rag_query\n    }"
+        code_language: python3
+        outputs:
+          alert_count:
+            children: null
+            type: number
+          status:
+            children: null
+            type: string
+          alert_status:
+            children: null
+            type: string
+          receiver:
+            children: null
+            type: string
+          alert_name:
+            children: null
+            type: string
+          severity:
+            children: null
+            type: string
+          instance:
+            children: null
+            type: string
+          job:
+            children: null
+            type: string
+          service:
+            children: null
+            type: string
+          layer:
+            children: null
+            type: string
+          namespace:
+            children: null
+            type: string
+          pod:
+            children: null
+            type: string
+          model:
+            children: null
+            type: string
+          summary:
+            children: null
+            type: string
+          description:
+            children: null
+            type: string
+          runbook_hint:
+            children: null
+            type: string
+          starts_at:
+            children: null
+            type: string
+          ends_at:
+            children: null
+            type: string
+          generator_url:
+            children: null
+            type: string
+          fingerprint:
+            children: null
+            type: string
+          labels_json:
+            children: null
+            type: string
+          annotations_json:
+            children: null
+            type: string
+          alert_text:
+            children: null
+            type: string
+          rag_query:
+            children: null
+            type: string
+          multi_alert_warning:
+            children: null
+            type: string
+        retry_config:
+          max_retries: 1
+          retry_enabled: true
+          retry_interval: 1000
+        selected: false
+        title: 单条告警规范化、批量保护与 RAG Query 构建
+        type: code
+        variables:
+        - value_selector:
+          - '1789192668812'
+          - _webhook_raw
+          value_type: object
+          variable: payload
+      height: 82
+      id: '1789205076746'
+      position:
+        x: -1300
+        y: -1450
+      positionAbsolute:
+        x: -1300
+        y: -1450
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: is
+            id: b7eb2dd9-86ae-47f7-9625-a55d73cf6d2b
+            value: firing
+            varType: string
+            variable_selector:
+            - '1789205076746'
+            - alert_status
+          logical_operator: and
+        selected: false
+        title: 是否为 firing 告警
+        type: if-else
+      height: 124
+      id: '1789264840270'
+      position:
+        x: -970
+        y: -1450
+      positionAbsolute:
+        x: -970
+        y: -1450
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        outputs:
+        - value_selector:
+          - '1789271471602'
+          - text
+          value_type: string
+          variable: text
+        selected: false
+        title: 输出
+        type: end
+      height: 89
+      id: '1789265518345'
+      position:
+        x: 50
+        y: -1540
+      positionAbsolute:
+        x: 50
+        y: -1540
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        agent_binding:
+          binding_type: inline_agent
+          package_ref: agent_1
+        agent_declared_outputs: []
+        agent_job:
+          declared_outputs: []
+          human_contacts: []
+          metadata:
+            agent_soul: null
+            file_refs: null
+          mode: tell_agent_what_to_do
+          previous_node_output_refs:
+          - key: null
+            name: null
+            node_id: '1789205076746'
+            output: alert_text
+            selector:
+            - '1789205076746'
+            - alert_text
+            value_selector: null
+            variable: null
+            variable_selector: null
+          - key: null
+            name: null
+            node_id: '1789205076746'
+            output: starts_at
+            selector:
+            - '1789205076746'
+            - starts_at
+            value_selector: null
+            variable: null
+            variable_selector: null
+          - key: null
+            name: null
+            node_id: '1789205076746'
+            output: runbook_hint
+            selector:
+            - '1789205076746'
+            - runbook_hint
+            value_selector: null
+            variable: null
+            variable_selector: null
+          - key: null
+            name: null
+            node_id: '1789205076746'
+            output: multi_alert_warning
+            selector:
+            - '1789205076746'
+            - multi_alert_warning
+            value_selector: null
+            variable: null
+            variable_selector: null
+          - key: null
+            name: null
+            node_id: '1789280000001'
+            output: result
+            selector:
+            - '1789280000001'
+            - result
+            value_selector: null
+            variable: null
+            variable_selector: null
+          schema_version: 1
+          workflow_prompt: '收到一条 AlertManager 告警，请对 vLLM 推理服务执行自主诊断。
+
+
+            【规范化告警】
+
+            {{#1789205076746.alert_text#}}
+
+
+            【多告警提示】
+
+            {{#1789205076746.multi_alert_warning#}}
+
+
+            【Runbook 知识库检索结果】
+
+            {{#1789280000001.result#}}
+
+
+            请遵循以下步骤：
+
+            1. 先阅读检索结果，结合 alert_name 与 runbook_hint 定位最相关的 Runbook 条目；Runbook 只作为方法和假设来源，不得作为本次故障事实。
+
+            2. 优先使用 list_rules 核对当前 Prometheus 实际加载的告警规则、表达式、阈值、for 与 labels/annotations；如与 Runbook/告警文本不一致，以当前规则为优先事实并指出差异。
+
+            3. 形成 1～3 个最相关假设 H1/H2/H3，并确定验证每个假设所需的最小实时证据。
+
+            4. 使用 list_targets 核对告警 instance/job 对应的监控目标及标签一致性；再用 query 查询最关键当前值。
+
+            5. 性能类告警按需使用 range_query，窗口尽量覆盖 StartsAt 前 5 分钟至后 10 分钟；当前仍 firing 时，可补查最近 5～10 分钟。
+
+            6. 如果推荐 PromQL 无数据，不要立刻判定指标不存在。先核对 selector/label；必要时依次按需使用 series、label_values、targets_metadata、metric_metadata
+            做自适应发现，再决定是否使用替代指标。使用替代指标必须说明替代依据。
+
+            7. 仅在需要建立 incident context、验证上下游症状或存在多个相关告警时调用 list_alerts。优先按相同/相关对象和相近时间筛选；时间先后只能作为旁证，不能单独证明因果。
+
+            8. Tool 分层：Tier 1 通常为 list_rules/list_targets/query；Tier 2 为 range_query/list_alerts；Tier 3 为 series/label_values/metric_metadata/targets_metadata。不要默认把
+            9 个工具全部调用。
+
+            9. 根据真实 Tool Result 将假设标为“支持 / 不支持 / 未验证”，区分告警触发时状态与当前状态。
+
+            10. 若知识库未命中、规则未找到、PromQL 无数据或证据不足，明确指出，不得猜测或补造。
+
+            11. 若 multi_alert_warning 非空，本 Workflow 只诊断第一条告警，最终报告必须明确说明，不得暗示已处理全部告警。
+
+            12. 原则上调用 2～8 次 Prometheus 工具，硬上限 10 次；每次调用都必须回答明确问题，达到停止条件立即输出。
+
+            13. 只做查询和诊断，不执行修复、重启、扩缩容或配置变更。'
+        agent_node_kind: dify_agent
+        agent_task: 收到单条告警。先用 Runbook 和真实 Prometheus rule 形成诊断计划与 1～3 个假设，再按 Tier 1→Tier 2→Tier 3 的最小必要工具策略获取实时证据。PromQL 无数据时执行自适应指标/标签发现；按需用
+          list_alerts 建立关联告警上下文。若 payload 含多条告警，仅诊断第一条并明确提示。只查询和诊断，不执行变更。
+        selected: false
+        title: Runbook + Prometheus Adaptive RCA Agent
+        type: agent
+        version: '2'
+      height: 118
+      id: '1789271471602'
+      position:
+        x: -290
+        y: -1540
+      positionAbsolute:
+        x: -290
+        y: -1540
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        dataset_ids: []
+        desc: 导入后请选择知识库 vLLM-RCA-Runbook；Query 使用代码节点生成的 rag_query
+        multiple_retrieval_config:
+          reranking_enable: false
+          reranking_mode: reranking_model
+          reranking_model:
+            model: ''
+            provider: ''
+          score_threshold: 0.45
+          top_k: 5
+        query_variable_selector:
+        - '1789205076746'
+        - rag_query
+        retrieval_mode: multiple
+        selected: false
+        title: 知识检索（请选择 vLLM-RCA-Runbook）
+        type: knowledge-retrieval
+      height: 135
+      id: '1789280000001'
+      position:
+        x: -630
+        y: -1540
+      positionAbsolute:
+        x: -630
+        y: -1540
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        outputs:
+        - value_selector:
+          - '1789205076746'
+          - alert_status
+          value_type: string
+          variable: status
+        - value_selector:
+          - '1789205076746'
+          - alert_text
+          value_type: string
+          variable: alert_text
+        selected: false
+        title: 非 firing 告警输出
+        type: end
+      height: 116
+      id: '1789280000003'
+      position:
+        x: -630
+        y: -1280
+      positionAbsolute:
+        x: -630
+        y: -1280
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    viewport:
+      x: 1432.9594772847022
+      y: 1538.84879108397
+      zoom: 0.8281706613345459
+  rag_pipeline_variables: []

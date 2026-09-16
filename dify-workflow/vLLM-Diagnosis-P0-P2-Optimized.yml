@@ -1,0 +1,702 @@
+agent_packages:
+  agent_1:
+    metadata:
+      description: ''
+      icon: null
+      icon_background: null
+      icon_type: null
+      name: Workflow Agent 1789271471602
+      role: ''
+    omitted_assets: []
+    schema_version: 1
+    soul:
+      app_features:
+        file_upload:
+          allowed_file_extensions:
+          - JPG
+          - JPEG
+          - PNG
+          - GIF
+          - WEBP
+          - SVG
+          allowed_file_types:
+          - document
+          - image
+          - audio
+          - video
+          allowed_file_upload_methods:
+          - local_file
+          - remote_url
+          enabled: true
+          image:
+            enabled: true
+          number_limits: 3
+        opening_statement: null
+        retriever_resource: null
+        sensitive_word_avoidance: null
+        speech_to_text: null
+        suggested_questions: null
+        suggested_questions_after_answer: null
+        text_to_speech: null
+      app_variables: []
+      config_files: []
+      config_note: ''
+      config_skills: []
+      env:
+        secret_refs: []
+        variables: []
+      human:
+        contacts: []
+        tools: []
+      knowledge:
+        sets: []
+      memory:
+        artifacts: []
+        budget: null
+        scope: null
+      misc_legacy:
+        file_upload:
+          allowed_file_extensions:
+          - JPG
+          - JPEG
+          - PNG
+          - GIF
+          - WEBP
+          - SVG
+          allowed_file_types:
+          - document
+          - image
+          - audio
+          - video
+          allowed_file_upload_methods:
+          - local_file
+          - remote_url
+          enabled: true
+          image:
+            enabled: true
+          number_limits: 3
+        opening_statement: null
+        retriever_resource: null
+        sensitive_word_avoidance: null
+        speech_to_text: null
+        suggested_questions: null
+        suggested_questions_after_answer: null
+        text_to_speech: null
+      model:
+        credential_ref: null
+        model: qwen3
+        model_provider: langgenius/openai_api_compatible/openai_api_compatible
+        model_settings:
+          frequency_penalty: null
+          max_tokens: null
+          presence_penalty: null
+          response_format: null
+          stop: null
+          temperature: null
+          top_p: null
+        plugin_id: langgenius/openai_api_compatible
+      prompt:
+        system_prompt: "你是一名负责 vLLM 推理服务运行状态诊断的 SRE 工程师。\n\n你会收到来自 AlertManager 的\
+          \ vLLM 告警。\n\n你的任务不是复述告警，也不是仅根据告警名称猜测故障原因，而是使用 Prometheus MCP 获取真实监控数据，并基于证据完成初步诊断。\n\
+          \n你可以使用以下 Prometheus MCP 工具：\n\n- list_targets：检查 Prometheus 当前监控目标及健康状态\n\
+          - query：执行 PromQL 即时查询\n- range_query：查询一段时间内的 Prometheus 指标趋势\n- list_alerts：按需查询当前活跃告警，用于告警关联分析\n- list_rules：仅在阈值未知或需核对规则时查询告警规则\n- label_values：在标签值不确定或查询为空时按需发现标签\n- series：在指标名或标签组合不确定时按需发现时间序列\n- targets_metadata：在指标语义或目标元数据需要确认时按需查询元数据\n\n你的核心工作方式是：\n\
+          \n告警\n→ 确认监控对象\n→ 查询当前状态\n→ 对齐告警时间窗口\n→ 查询关键趋势\n→ 验证主要根因假设\n→ 输出证据化诊断\n\n\
+          请严格遵守以下规则。\n\n一、证据优先原则\n\n1. 所有关键判断必须尽量基于本次 Prometheus MCP 实际返回的数据。\n2.\
+          \ 不允许把 AlertManager 告警文本本身当成故障已经成立的证据。\n3. 不允许根据常识、经验或模型记忆编造指标值、请求量、延迟、错误率、GPU状态或根因。\n\
+          4. 不要声称已经检查某个指标，除非本次实际调用工具查询过该指标。\n5. 某一次 PromQL 没有返回结果，不代表该类指标不存在。\n6.\
+          \ 如果没有明确证据证明某类指标不存在，只能说“本次查询未获得该指标数据”。\n7. 所有数值结论都应能追溯到实际 Tool Result。\n\
+          \n二、监控对象与标签约束\n\n8. 收到 firing 告警后，优先确认对应的 Prometheus target 是否健康。\n9. 生成\
+          \ PromQL 时，优先使用告警 labels 中实际提供的 job、instance 等标签限定查询对象。\n10. 不要自行替换告警中的\
+          \ job 或 instance。\n11. 如果告警 labels 与 Prometheus target 标签不一致，应明确指出标签映射不一致，不要假定它们属于同一对象。\n11.1 输入已经按 job + instance 组织为诊断分组；必须逐组分析，不得把不同组的指标、时间和根因串联。\n11.2 同一组内存在多个 firing 告警时，可按需使用 list_alerts 检查关联告警，并形成因果链假设；不得仅因同时出现就断言因果关系。\n11.3 list_alerts、list_rules、label_values、series、targets_metadata 都是按需工具，不得默认全部调用。\n\
+          \n三、时间对齐原则\n\n12. 优先读取告警中的 StartsAt。\n13. 验证告警是否成立时，查询窗口必须尽量覆盖告警触发时间。\n\
+          14. 对性能类告警，推荐优先查询：\n    StartsAt 前 5 分钟至 StartsAt 后 10 分钟。\n15. 如果告警当前仍处于\
+          \ firing 状态，可额外查询最近 5～10 分钟，用于判断当前是否仍异常。\n16. 必须区分：\n    - 告警触发时是否异常\n \
+          \   - 当前是否仍异常\n17. 如果查询窗口不覆盖告警触发时间，不得使用该数据直接证明原告警成立或不成立。\n18. 可以说明“近期出现类似异常”，但必须与“验证原告警”明确区分。\n\
+          \n四、PromQL 与单位规则\n\n19. 报告中引用的 PromQL，必须与本次实际 Tool Call 中执行的 PromQL一致，不得自行重写或猜测。\n\
+          20. rate()、increase()、histogram_quantile() 等函数必须按照真实 PromQL 语义解释。\n21. 不得自行改变单位。\n\
+          22. 如果查询得到 0.47/s，应说明为约 0.47 次/秒，而不是擅自解释为 0.47 次/分钟。\n23. 如果指标语义不明确，应保守描述，不要擅自把某个\
+          \ histogram count rate 称为“业务吞吐量”。\n\n五、Histogram 规则\n\n24. Prometheus histogram\
+          \ bucket 是累计 bucket。\n25. 不得把累计 bucket 直接解释成某个独立区间内的请求数量。\n26. P95/P99 等分位数优先使用\
+          \ histogram_quantile() 计算。\n27. 如果要计算“超过 X 秒的请求比例”，必须基于正确的 bucket 和总量进行计算。\n\
+          28. 如果不存在恰好对应 X 的 bucket，不得伪造精确的“超过 X 秒请求比例”。\n29. P99 与“超过某阈值的请求比例”必须做一致性检查。\n\
+          30. 如果两个结论明显矛盾，应优先认为查询方法或解释存在问题，并明确指出需要复核。\n\n六、NaN 规则\n\n31. NaN 仅表示该时间点没有得到有效数值。\n\
+          32. NaN 不等于服务中断，也不等于数据丢失。\n33. NaN 可能由以下情况导致：\n    - 无请求\n    - 分母为 0\n\
+          \    - rate 窗口样本不足\n    - 时间序列缺失\n    - scrape 异常\n    - PromQL 表达式在该时间点无定义\n\
+          34. 除非同时存在 up=0、scrape 失败或其他明确证据，否则不得把 NaN 解释为服务中断。\n35. 对 NaN 原因必须标记为“待确认”。\n\
+          \n七、阈值与数值比较规则\n\n36. 如果告警规则中明确给出阈值，应使用实际值与阈值比较。\n37. 输出结论前必须检查比较方向：\n  \
+          \  actual > threshold = 超过阈值\n    actual < threshold = 低于阈值\n38. 如果告警阈值未知，不得声称当前值高于或低于告警阈值。\n\
+          39. 如果阈值未知，应优先按需使用 list_rules 核对告警表达式、持续时间和阈值；仍无法获得时，只能报告实际值，并明确说明“告警阈值未知”。\n\n七点一、PromQL 自适应发现策略\n\n当预期指标查询为空时：\n- 不立即判定指标不存在；\n- 先检查 job、instance 与 target 标签是否一致；\n- 必要时降低标签约束，但必须说明查询范围变化；\n- 使用 label_values、series 或 targets_metadata 按需发现真实指标名、标签和值；\n- 找到候选序列后，重新使用精确标签执行 query 或 range_query；\n- 只有经过合理发现仍无数据时，才可报告“当前 Prometheus 未发现可用于验证该假设的指标”。\n- 自适应发现通常最多占用 2 次工具调用，避免无边界搜索。\n\n八、vLLM 性能诊断策略\n\n对于性能类告警，应根据告警类型选择最相关的指标，不要求每次全部查询。\n\
+          \n通用因果链：\n\n请求负载\n→ Running Requests / Waiting Requests\n→ Queue\n→ TTFT\n\
+          → TPOT\n→ E2E Latency\n→ KV Cache\n→ 请求吞吐/成功率/错误率\n→ GPU / Prefill / 请求输入特征\n\
+          \n对于 HighVLLMTimeToFirstToken 或类似 TTFT 告警，优先按以下顺序分析：\n\n第一层：确认告警本身\n- TTFT\
+          \ 当前值\n- TTFT P95/P99\n- 告警窗口内 TTFT 趋势\n- 告警阈值\n\n第二层：判断是否存在排队\n- Waiting\
+          \ Requests\n- Running Requests\n- Queue 相关指标\n\n第三层：判断容量和缓存压力\n- KV Cache\
+          \ 使用率\n- Cache 相关指标\n- 并发是否接近上限\n\n第四层：判断负载和请求特征\n- 请求速率\n- Prompt/Input\
+          \ Tokens\n- 请求并发\n- 输入长度是否明显升高\n\n第五层：如果仍无法解释\n- GPU 利用率\n- GPU 显存\n- Prefill\
+          \ 性能\n- 模型服务日志\n\n不要求每一层全部执行，应根据已有证据决定是否继续。\n\n九、根因假设验证\n\n40. 不要简单列出大量“可能原因”。\n\
+          41. 对主要根因假设，应尽量标记为：\n\n- 支持\n- 不支持\n- 未验证\n\n例如：\n\nH1 请求排队\n状态：不支持\n证据：waiting_requests\
+          \ 当前为 0，告警窗口内未持续上升。\n\nH2 KV Cache 压力\n状态：不支持\n证据：KV Cache 使用率较低。\n\nH3\
+          \ GPU / Prefill 计算瓶颈\n状态：未验证\n证据：当前没有 GPU 或 Prefill 指标。\n\n42. 只有被实际证据支持的原因，才能称为“最可能原因”。\n\
+          43. 如果现有监控只能确认异常现象，但无法定位根因，应明确说：\n“告警已被监控数据验证，但当前证据不足以进一步确定根因。”\n\n十、工具调用控制\n\
+          \n44. 常规诊断目标为 3～6 次 Prometheus 工具调用，软上限为 8 次，硬上限为 10 次。\n45. 不要为了“寻找原因”无限扩展查询，也不要因为开放了多个工具而逐一调用。每次调用前先说明当前假设、所需证据和选择该工具的原因。\n46. 满足以下任一条件时，应停止继续查询并输出诊断：\n\
+          \n- 已确认告警成立，并找到至少一个被证据支持的主要原因；\n- 已确认告警成立，但当前指标不足以进一步定位根因；\n- 当前数据不足以验证告警；\n\
+          - 已达到 10 次硬上限；达到 8 次软上限后，只有一项明确且高价值的待验证假设时才可继续。\n\n47. 当前只允许观察、查询和诊断。\n48. 不执行任何修复、重启、扩缩容、参数修改或其他变更操作。\n49. 工具选择顺序不是固定清单：先用 list_targets 确认对象；再用 query/range_query 验证现象；仅在阈值未知、查询为空或需要关联分析时调用对应的辅助工具。\n\n\
+          最终必须按照以下结构输出：\n\n【告警信息】\n- 告警名称\n- instance\n- job\n- severity\n- status\n\
+          - StartsAt\n- 告警阈值（如果已知）\n\n【监控目标状态】\n说明对应 Prometheus target 是否健康。\n\n【实际工具调用】\n\
+          列出本次真正调用过的工具。\n对于 query / range_query，列出实际执行的 PromQL 和查询窗口。\n\n【监控事实】\n\
+          只列出本次 Tool Result 实际返回的数据。\n不得在这一部分加入推测。\n\n【时间一致性判断】\n说明查询窗口是否覆盖告警触发时间。\n\
+          分别说明：\n- 告警触发时是否有证据支持异常\n- 当前是否仍然异常\n\n【根因假设】\n对主要假设分别标记：\n- 支持\n- 不支持\n\
+          - 未验证\n并给出对应证据。\n\n【诊断结论】\n说明：\n- 告警是否被 Prometheus 数据支持\n- 当前是否仍异常\n- 最可能的问题是什么\n\
+          - 判断置信程度：高 / 中 / 低\n- 如果根因无法确定，要明确说明证据不足\n\n【尚未验证】\n列出当前缺少证据、不能确认的问题。\n\n\
+          【建议进一步检查】\n只给出下一步应补充的观测或验证项。\n不要执行修复操作。\n\n诊断深度规则：\n\n1. 首先确认“告警现象是否真实存在”。\n\
+          2. 如果告警不成立，可停止进一步根因查询。\n3. 如果告警成立：\n   - 不应只停留在“指标确实异常”；\n   - 在工具调用预算允许时，应继续验证至少\
+          \ 1～2 个最相关的根因假设。\n4. 如果所有根因假设仍为“未验证”，且仍有可用工具调用次数，则不能立即结束诊断。\n5. 只有在：\n \
+          \  - 已找到被证据支持的主要原因；\n   - 或当前 Prometheus 确实缺少继续定位所需指标；\n   才可以结束根因分析。"
+      sandbox:
+        config:
+          cpu: null
+          env: []
+          image: null
+          working_dir: null
+        provider: null
+      schema_version: 1
+      tools:
+        cli_tools: []
+        dify_tools:
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: list_targets
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: query
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: range_query
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: list_alerts
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: list_rules
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: label_values
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: series
+        - credential_ref: null
+          credential_type: unauthorized
+          description: null
+          enabled: true
+          name: null
+          plugin_id: ''
+          provider: prometheus-mcp
+          provider_id: prometheus-mcp
+          provider_type: mcp
+          runtime_parameters: {}
+          tool_name: targets_metadata
+    workspace_skills: []
+app:
+  description: ''
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  icon_type: emoji
+  mode: workflow
+  name: vLLM-Diagnosis-P0-P2-Optimized
+  use_icon_as_answer_icon: false
+dependencies:
+- current_identifier: null
+  type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/openai_api_compatible:0.0.66@51801b51069b2578c3fcf6d38edc45c45efd8b7ef4fdb25f096bd84d4f95a53d
+    version: null
+kind: app
+version: 0.7.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload: {}
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: trigger-webhook
+        targetType: code
+      id: 1789192668812-source-1789205076746-target
+      source: '1789192668812'
+      sourceHandle: source
+      target: '1789205076746'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: if-else
+      id: 1789205076746-source-1789264840270-target
+      source: '1789205076746'
+      sourceHandle: source
+      target: '1789264840270'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: end
+      id: 1789264840270-false-1789265519000-target
+      source: '1789264840270'
+      sourceHandle: 'false'
+      target: '1789265519000'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: agent
+      id: 1789264840270-true-1789271471602-target
+      source: '1789264840270'
+      sourceHandle: 'true'
+      target: '1789271471602'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: agent
+        targetType: end
+      id: 1789271471602-source-1789265518345-target
+      selected: false
+      source: '1789271471602'
+      sourceHandle: source
+      target: '1789265518345'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        async_mode: true
+        body: []
+        content_type: application/json
+        headers: []
+        method: POST
+        params: []
+        response_body: ''
+        selected: false
+        status_code: 200
+        title: Webhook 触发器
+        type: trigger-webhook
+        variables:
+        - label: raw
+          required: true
+          value_selector: []
+          value_type: object
+          variable: _webhook_raw
+        webhook_debug_url: ''
+        webhook_url: ''
+      height: 130
+      id: '1789192668812'
+      position:
+        x: -1629.8937243330315
+        y: -1722.1099875651023
+      positionAbsolute:
+        x: -1629.8937243330315
+        y: -1722.1099875651023
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        code: |-
+          import json
+
+          def main(payload: dict) -> dict:
+              body = payload.get("body", {}) or {}
+              alerts = body.get("alerts", []) or []
+              normalized = []
+
+              for index, alert in enumerate(alerts):
+                  labels = alert.get("labels", {}) or {}
+                  annotations = alert.get("annotations", {}) or {}
+                  normalized.append({
+                      "index": index,
+                      "alertname": labels.get("alertname", "unknown"),
+                      "status": alert.get("status", "unknown"),
+                      "severity": labels.get("severity", "unknown"),
+                      "instance": labels.get("instance", "unknown"),
+                      "job": labels.get("job", "unknown"),
+                      "startsAt": alert.get("startsAt", ""),
+                      "endsAt": alert.get("endsAt", ""),
+                      "summary": annotations.get("summary", ""),
+                      "description": annotations.get("description", ""),
+                      "generatorURL": alert.get("generatorURL", ""),
+                      "labels": labels,
+                      "annotations": annotations,
+                  })
+
+              firing_alerts = [item for item in normalized if item["status"] == "firing"]
+              resolved_alerts = [item for item in normalized if item["status"] == "resolved"]
+
+              # 按 job + instance 分组，避免不同监控对象的告警在一次诊断中相互串联。
+              groups = {}
+              for item in firing_alerts:
+                  key = f'{item["job"]}::{item["instance"]}'
+                  groups.setdefault(key, {
+                      "group_key": key,
+                      "job": item["job"],
+                      "instance": item["instance"],
+                      "alerts": [],
+                  })["alerts"].append(item)
+
+              diagnosis_groups = list(groups.values())
+              diagnosis_group_items = [
+                  json.dumps(group, ensure_ascii=False) for group in diagnosis_groups
+              ]
+              primary = firing_alerts[0] if firing_alerts else {}
+              alert_texts = []
+              for item in firing_alerts:
+                  alert_texts.append("\n".join([
+                      f'AlertName: {item["alertname"]}',
+                      f'Status: {item["status"]}',
+                      f'Severity: {item["severity"]}',
+                      f'Instance: {item["instance"]}',
+                      f'Job: {item["job"]}',
+                      f'Summary: {item["summary"]}',
+                      f'Description: {item["description"]}',
+                      f'StartsAt: {item["startsAt"]}',
+                      f'GeneratorURL: {item["generatorURL"]}',
+                  ]))
+
+              return {
+                  "status": "firing" if firing_alerts else "resolved",
+                  "has_firing": bool(firing_alerts),
+                  "receiver": body.get("receiver", ""),
+                  "alert_count": len(normalized),
+                  "firing_alert_count": len(firing_alerts),
+                  "resolved_alert_count": len(resolved_alerts),
+                  "alert_text": "\n\n---\n\n".join(alert_texts),
+                  "alerts_json": json.dumps(normalized, ensure_ascii=False),
+                  "diagnosis_groups": diagnosis_group_items,
+                  "diagnosis_groups_json": json.dumps(diagnosis_groups, ensure_ascii=False),
+                  "primary_alert_name": primary.get("alertname", ""),
+                  "primary_instance": primary.get("instance", ""),
+                  "primary_job": primary.get("job", ""),
+                  "primary_starts_at": primary.get("startsAt", ""),
+                  "skip_message": "No firing alerts. Diagnosis skipped.",
+              }
+        code_language: python3
+        outputs:
+          alert_count:
+            children: null
+            type: number
+          alert_text:
+            children: null
+            type: string
+          alerts_json:
+            children: null
+            type: string
+          diagnosis_groups_json:
+            children: null
+            type: string
+          diagnosis_groups:
+            children: null
+            type: array[string]
+          firing_alert_count:
+            children: null
+            type: number
+          has_firing:
+            children: null
+            type: boolean
+          primary_alert_name:
+            children: null
+            type: string
+          primary_instance:
+            children: null
+            type: string
+          primary_job:
+            children: null
+            type: string
+          primary_starts_at:
+            children: null
+            type: string
+          receiver:
+            children: null
+            type: string
+          resolved_alert_count:
+            children: null
+            type: number
+          skip_message:
+            children: null
+            type: string
+          status:
+            children: null
+            type: string
+        retry_config:
+          max_retries: 1
+          retry_enabled: true
+          retry_interval: 1000
+        selected: false
+        title: 代码执行
+        type: code
+        variables:
+        - value_selector:
+          - '1789192668812'
+          - _webhook_raw
+          value_type: object
+          variable: payload
+      height: 82
+      id: '1789205076746'
+      position:
+        x: -1629.8937243330315
+        y: -1396.6994487237864
+      positionAbsolute:
+        x: -1629.8937243330315
+        y: -1396.6994487237864
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: is
+            id: b7eb2dd9-86ae-47f7-9625-a55d73cf6d2b
+            value: true
+            varType: boolean
+            variable_selector:
+            - '1789205076746'
+            - has_firing
+          logical_operator: and
+        selected: false
+        title: 条件分支
+        type: if-else
+      height: 124
+      id: '1789264840270'
+      position:
+        x: -1312.8858972565151
+        y: -1368.6635538180158
+      positionAbsolute:
+        x: -1312.8858972565151
+        y: -1368.6635538180158
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        outputs:
+        - value_selector:
+          - '1789271471602'
+          - text
+          value_type: string
+          variable: diagnosis_report
+        selected: false
+        title: 输出
+        type: end
+      height: 89
+      id: '1789265518345'
+      position:
+        x: -936.799616095107
+        y: -1233.4158288065844
+      positionAbsolute:
+        x: -936.799616095107
+        y: -1233.4158288065844
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        outputs:
+        - value_selector:
+          - '1789205076746'
+          - skip_message
+          value_type: string
+          variable: skip_reason
+        selected: false
+        title: 无 firing 告警
+        type: end
+      height: 89
+      id: '1789265519000'
+      position:
+        x: -936.799616095107
+        y: -1090.0
+      positionAbsolute:
+        x: -936.799616095107
+        y: -1090.0
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    - data:
+        agent_binding:
+          binding_type: inline_agent
+          package_ref: agent_1
+        agent_declared_outputs: []
+        agent_job:
+          declared_outputs: []
+          human_contacts: []
+          metadata:
+            agent_soul: null
+            file_refs: null
+          mode: tell_agent_what_to_do
+          previous_node_output_refs:
+          - key: null
+            name: null
+            node_id: '1789205076746'
+            output: status
+            selector:
+            - '1789205076746'
+            - status
+            value_selector: null
+            variable: null
+            variable_selector: null
+          - key: null
+            name: null
+            node_id: '1789205076746'
+            output: diagnosis_groups_json
+            selector:
+            - '1789205076746'
+            - diagnosis_groups_json
+            value_selector: null
+            variable: null
+            variable_selector: null
+          schema_version: 1
+          workflow_prompt: |-
+            收到 AlertManager 的 firing 告警，请对 vLLM 服务进行自主诊断。
+
+            firing 数量：{{#1789205076746.firing_alert_count#}}
+            诊断分组（已按 job + instance 聚合）：
+            {{#1789205076746.diagnosis_groups_json#}}
+
+            执行要求：
+            1. 若存在多个分组，必须按数组顺序逐组诊断；每组单独列出结果，不得把不同 job 或 instance 的事实、时间与根因混用。
+            2. 对每组使用 list_targets 查找与该组实际 job / instance 匹配的 target；禁止硬编码 inference-engine 或替换标签。
+            3. 根据告警类型选择核心指标，使用 query 查询当前状态。
+            4. 使用 range_query 验证原始告警时，优先覆盖 StartsAt - 5m 至 StartsAt + 10m；若仍 firing，可再查询最近 5～10m 判断当前状态。
+            5. 阈值未知时按需使用 list_rules；同组多告警需要关联分析时按需使用 list_alerts。
+            6. 查询为空时执行受限的 PromQL 自适应发现：检查标签，必要时使用 label_values、series 或 targets_metadata；不得默认调用全部发现工具。
+            7. 每组至少验证告警现象，并在预算允许时验证 1～2 个最相关根因假设。
+            8. 常规目标 3～6 次工具调用，软上限 8 次，硬上限 10 次；到达硬上限必须输出结论。
+            9. 所有结论必须来自本次真实 Tool Result；证据不足时明确说明，禁止猜测。
+        agent_node_kind: dify_agent
+        agent_task: |-
+          收到 AlertManager 的 firing 告警，请对 vLLM 服务进行自主诊断。
+
+          firing 数量：{{#1789205076746.firing_alert_count#}}
+          诊断分组（已按 job + instance 聚合）：
+          {{#1789205076746.diagnosis_groups_json#}}
+
+          执行要求：
+          1. 若存在多个分组，必须按数组顺序逐组诊断；每组单独列出结果，不得把不同 job 或 instance 的事实、时间与根因混用。
+          2. 对每组使用 list_targets 查找与该组实际 job / instance 匹配的 target；禁止硬编码 inference-engine 或替换标签。
+          3. 根据告警类型选择核心指标，使用 query 查询当前状态。
+          4. 使用 range_query 验证原始告警时，优先覆盖 StartsAt - 5m 至 StartsAt + 10m；若仍 firing，可再查询最近 5～10m 判断当前状态。
+          5. 阈值未知时按需使用 list_rules；同组多告警需要关联分析时按需使用 list_alerts。
+          6. 查询为空时执行受限的 PromQL 自适应发现：检查标签，必要时使用 label_values、series 或 targets_metadata；不得默认调用全部发现工具。
+          7. 每组至少验证告警现象，并在预算允许时验证 1～2 个最相关根因假设。
+          8. 常规目标 3～6 次工具调用，软上限 8 次，硬上限 10 次；到达硬上限必须输出结论。
+          9. 所有结论必须来自本次真实 Tool Result；证据不足时明确说明，禁止猜测。
+        selected: true
+        title: Agent
+        type: agent
+        version: '2'
+      height: 118
+      id: '1789271471602'
+      position:
+        x: -1020.524110265203
+        y: -1530.7362591906724
+      positionAbsolute:
+        x: -1020.524110265203
+        y: -1530.7362591906724
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 0
+    viewport:
+      x: 1432.9594772847022
+      y: 1538.84879108397
+      zoom: 0.8281706613345459
+  rag_pipeline_variables: []
