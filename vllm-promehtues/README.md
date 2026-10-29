@@ -29,7 +29,7 @@ flowchart LR
    
    # 设置其属主、属组，以确保指定的用户可以正常访问
    chown 1000:1000 prometheus/data alertmanager/data
-   chown 472:472 grafana_data/
+   chown 472:472 grafana/data/
    ```
 
 2. 修改目标Target（vllm）
